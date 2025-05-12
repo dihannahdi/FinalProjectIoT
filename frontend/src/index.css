@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f3f4f6;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+.btn {
+  @apply px-4 py-2 rounded-md transition-all duration-200 cursor-pointer;
+}
+
+.btn-primary {
+  @apply bg-blue-600 text-white hover:bg-blue-700;
+}
+
+.btn-secondary {
+  @apply bg-gray-600 text-white hover:bg-gray-700;
+}
+
+.btn-success {
+  @apply bg-green-600 text-white hover:bg-green-700;
+}
+
+.btn-danger {
+  @apply bg-red-600 text-white hover:bg-red-700;
+}
+
+.form-control {
+  @apply block w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+}
+
+.game-button {
+  @apply w-24 h-24 rounded-full cursor-pointer transition-all duration-200 shadow-lg;
+}
+
+.simon-red {
+  @apply bg-red-500 hover:bg-red-600 active:bg-red-700;
+}
+
+.simon-green {
+  @apply bg-green-500 hover:bg-green-600 active:bg-green-700;
+}
+
+.simon-blue {
+  @apply bg-blue-500 hover:bg-blue-600 active:bg-blue-700;
+}
+
+.simon-yellow {
+  @apply bg-yellow-500 hover:bg-yellow-600 active:bg-yellow-700;
+}
+
+.simon-active {
+  @apply transform scale-105 shadow-xl brightness-125;
+}
+
+.nav-link {
+  @apply px-4 py-2 rounded-md transition-all duration-200 cursor-pointer hover:bg-gray-100;
+}
+
+.nav-link.active {
+  @apply bg-blue-100 text-blue-700;
+}
+
+.card {
+  @apply bg-white rounded-lg shadow-md p-6;
+} 

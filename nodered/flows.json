@@ -1,0 +1,399 @@
+[
+    {
+        "id": "4b9a1b53.8b3284",
+        "type": "tab",
+        "label": "Simon Says Game",
+        "disabled": false,
+        "info": "Flow for Simon Says IoT Game"
+    },
+    {
+        "id": "cc5d6ef4.1ee43",
+        "type": "mqtt-broker",
+        "name": "Local MQTT",
+        "broker": "localhost",
+        "port": "1883",
+        "clientid": "",
+        "usetls": false,
+        "compatmode": false,
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": ""
+    },
+    {
+        "id": "72e7f4ef.d17cac",
+        "type": "mqtt in",
+        "z": "4b9a1b53.8b3284",
+        "name": "Score Input",
+        "topic": "simon_says/score",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "cc5d6ef4.1ee43",
+        "x": 130,
+        "y": 120,
+        "wires": [
+            [
+                "e96ffe7c.1bb55"
+            ]
+        ]
+    },
+    {
+        "id": "e96ffe7c.1bb55",
+        "type": "function",
+        "z": "4b9a1b53.8b3284",
+        "name": "Process Score",
+        "func": "// Parse the incoming score message\nlet player = msg.payload.player || \"Anonymous\";\nlet score = msg.payload.score || 0;\n\n// Store score in context\nlet scores = context.get('scores') || [];\n\n// Add new score\nscores.push({\n    player: player,\n    score: score,\n    timestamp: new Date().toISOString()\n});\n\n// Sort scores in descending order\nscores.sort((a, b) => b.score - a.score);\n\n// Keep only top 10 scores\nif (scores.length > 10) {\n    scores = scores.slice(0, 10);\n}\n\n// Store updated scores\ncontext.set('scores', scores);\n\n// Send to API for database storage\nmsg.payload = {\n    player: player,\n    score: score,\n    timestamp: new Date().toISOString()\n};\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 320,
+        "y": 120,
+        "wires": [
+            [
+                "7bf6534c.d9affc",
+                "9fe31cf5.71dda"
+            ]
+        ]
+    },
+    {
+        "id": "7bf6534c.d9affc",
+        "type": "http request",
+        "z": "4b9a1b53.8b3284",
+        "name": "Save Score to API",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "http://localhost:3000/api/scores",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 550,
+        "y": 120,
+        "wires": [
+            [
+                "5d9c81a8.8d242"
+            ]
+        ]
+    },
+    {
+        "id": "5d9c81a8.8d242",
+        "type": "debug",
+        "z": "4b9a1b53.8b3284",
+        "name": "API Response",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 750,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "a30b71d.41148f",
+        "type": "mqtt in",
+        "z": "4b9a1b53.8b3284",
+        "name": "Device Status",
+        "topic": "simon_says/status",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "cc5d6ef4.1ee43",
+        "x": 140,
+        "y": 180,
+        "wires": [
+            [
+                "d3f3fdf9.b8fb3"
+            ]
+        ]
+    },
+    {
+        "id": "d3f3fdf9.b8fb3",
+        "type": "function",
+        "z": "4b9a1b53.8b3284",
+        "name": "Process Status",
+        "func": "// Store device status\nlet status = msg.payload.status || \"unknown\";\ncontext.set('deviceStatus', status);\n\n// Format message for dashboard\nmsg.payload = { status: status, time: new Date().toISOString() };\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 330,
+        "y": 180,
+        "wires": [
+            [
+                "c38b6a95.1f1668"
+            ]
+        ]
+    },
+    {
+        "id": "c38b6a95.1f1668",
+        "type": "debug",
+        "z": "4b9a1b53.8b3284",
+        "name": "Device Status Log",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 550,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "e8d9c27e.38a21",
+        "type": "inject",
+        "z": "4b9a1b53.8b3284",
+        "name": "Start Game Button",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"command\":\"start\"}",
+        "payloadType": "json",
+        "x": 160,
+        "y": 240,
+        "wires": [
+            [
+                "9dfd0bfd.8c3298"
+            ]
+        ]
+    },
+    {
+        "id": "9dfd0bfd.8c3298",
+        "type": "mqtt out",
+        "z": "4b9a1b53.8b3284",
+        "name": "Game Commands",
+        "topic": "simon_says/game",
+        "qos": "0",
+        "retain": "false",
+        "broker": "cc5d6ef4.1ee43",
+        "x": 380,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "7d36dbdb.59c384",
+        "type": "inject",
+        "z": "4b9a1b53.8b3284",
+        "name": "Stop Game Button",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"command\":\"stop\"}",
+        "payloadType": "json",
+        "x": 160,
+        "y": 280,
+        "wires": [
+            [
+                "9dfd0bfd.8c3298"
+            ]
+        ]
+    },
+    {
+        "id": "fa3dde8c.befc5",
+        "type": "http in",
+        "z": "4b9a1b53.8b3284",
+        "name": "Start Game API",
+        "url": "/api/game/start",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 340,
+        "wires": [
+            [
+                "6e6d6bfa.66ec04"
+            ]
+        ]
+    },
+    {
+        "id": "6e6d6bfa.66ec04",
+        "type": "function",
+        "z": "4b9a1b53.8b3284",
+        "name": "Format Command",
+        "func": "// Get player name from request if available\nlet player = msg.payload.player || \"Anonymous\";\n\n// Create command payload\nmsg.payload = {\n    command: \"start\",\n    player: player\n};\n\nreturn [\n    msg, // Pass to MQTT out\n    { payload: { status: \"success\", message: \"Game started\" }, statusCode: 200 } // HTTP response\n];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 340,
+        "y": 340,
+        "wires": [
+            [
+                "9dfd0bfd.8c3298"
+            ],
+            [
+                "b1d2bade.6ccca8"
+            ]
+        ]
+    },
+    {
+        "id": "b1d2bade.6ccca8",
+        "type": "http response",
+        "z": "4b9a1b53.8b3284",
+        "name": "HTTP Response",
+        "statusCode": "",
+        "headers": {},
+        "x": 550,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "9ef4b32d.b7ae3",
+        "type": "http in",
+        "z": "4b9a1b53.8b3284",
+        "name": "Stop Game API",
+        "url": "/api/game/stop",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 380,
+        "wires": [
+            [
+                "b3edcc90.5d68c"
+            ]
+        ]
+    },
+    {
+        "id": "b3edcc90.5d68c",
+        "type": "function",
+        "z": "4b9a1b53.8b3284",
+        "name": "Format Command",
+        "func": "// Create command payload\nmsg.payload = {\n    command: \"stop\"\n};\n\nreturn [\n    msg, // Pass to MQTT out\n    { payload: { status: \"success\", message: \"Game stopped\" }, statusCode: 200 } // HTTP response\n];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 340,
+        "y": 380,
+        "wires": [
+            [
+                "9dfd0bfd.8c3298"
+            ],
+            [
+                "b1d2bade.6ccca8"
+            ]
+        ]
+    },
+    {
+        "id": "b7cad01c.09cd7",
+        "type": "http in",
+        "z": "4b9a1b53.8b3284",
+        "name": "Get Leaderboard API",
+        "url": "/api/leaderboard",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 170,
+        "y": 440,
+        "wires": [
+            [
+                "c44b8b87.c63878"
+            ]
+        ]
+    },
+    {
+        "id": "c44b8b87.c63878",
+        "type": "function",
+        "z": "4b9a1b53.8b3284",
+        "name": "Get Leaderboard",
+        "func": "// Get scores from context\nlet scores = context.get('scores') || [];\n\n// Create HTTP response\nmsg.payload = scores;\n\n// Set HTTP status code\nmsg.statusCode = 200;\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 370,
+        "y": 440,
+        "wires": [
+            [
+                "2968ab1d.d33c84"
+            ]
+        ]
+    },
+    {
+        "id": "2968ab1d.d33c84",
+        "type": "http response",
+        "z": "4b9a1b53.8b3284",
+        "name": "HTTP Response",
+        "statusCode": "",
+        "headers": {},
+        "x": 550,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "9fe31cf5.71dda",
+        "type": "debug",
+        "z": "4b9a1b53.8b3284",
+        "name": "Score Debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 540,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "f7e46a74.35c798",
+        "type": "comment",
+        "z": "4b9a1b53.8b3284",
+        "name": "Score Processing Flow",
+        "info": "",
+        "x": 160,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "d74b8cb.cb5abb",
+        "type": "comment",
+        "z": "4b9a1b53.8b3284",
+        "name": "Game Control Flow",
+        "info": "",
+        "x": 150,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "e1bbbec8.fa79c",
+        "type": "comment",
+        "z": "4b9a1b53.8b3284",
+        "name": "API Endpoints",
+        "info": "",
+        "x": 140,
+        "y": 400,
+        "wires": []
+    }
+] 
