@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
@@ -13,6 +13,19 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  // Fetch user profile - defined with useCallback to avoid dependency issues
+  const fetchUserProfile = useCallback(async () => {
+    try {
+      const response = await axios.get('/api/users/profile');
+      setCurrentUser(response.data.data.user);
+      setIsAuthenticated(true);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      logout();
+    }
+  }, []);
+
   // Check if user is already logged in
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -23,20 +36,7 @@ export function AuthProvider({ children }) {
     } else {
       setLoading(false);
     }
-  }, []);
-
-  // Fetch user profile
-  const fetchUserProfile = async () => {
-    try {
-      const response = await axios.get('/api/users/profile');
-      setCurrentUser(response.data.data.user);
-      setIsAuthenticated(true);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-      logout();
-    }
-  };
+  }, [fetchUserProfile]);
 
   // Register new user
   const register = async (userData) => {
@@ -80,7 +80,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Logout user
+  // Logout user - needs to be defined after fetchUserProfile to avoid reference error
   const logout = () => {
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
