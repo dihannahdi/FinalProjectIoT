@@ -40,62 +40,76 @@ app.get('/', (req, res) => {
   res.json({ message: 'Simon Says Game API' });
 });
 
-// MQTT Client setup
-const mqttClient = mqtt.connect(process.env.MQTT_BROKER || 'mqtt://localhost:1883', {
-  clientId: process.env.MQTT_CLIENT_ID || `simon_says_backend_${Math.random().toString(16).slice(2, 8)}`,
-  username: process.env.MQTT_USERNAME,
-  password: process.env.MQTT_PASSWORD,
-  clean: true
-});
-
-// MQTT connection events
-mqttClient.on('connect', () => {
-  console.log('Connected to MQTT broker');
-  
-  // Subscribe to score topic
-  mqttClient.subscribe('simon_says/score', (err) => {
-    if (!err) {
-      console.log('Subscribed to simon_says/score');
-    }
+// MQTT Client setup (wrapped in try-catch to make it optional)
+let mqttClient = null;
+try {
+  mqttClient = mqtt.connect(process.env.MQTT_BROKER || 'mqtt://localhost:1883', {
+    clientId: process.env.MQTT_CLIENT_ID || `simon_says_backend_${Math.random().toString(16).slice(2, 8)}`,
+    username: process.env.MQTT_USERNAME,
+    password: process.env.MQTT_PASSWORD,
+    clean: true,
+    connectTimeout: 5000, // 5 seconds timeout
   });
-  
-  // Subscribe to device status topic
-  mqttClient.subscribe('simon_says/status', (err) => {
-    if (!err) {
-      console.log('Subscribed to simon_says/status');
-    }
-  });
-});
 
-mqttClient.on('error', (error) => {
-  console.error('MQTT Error:', error);
-});
-
-mqttClient.on('message', async (topic, message) => {
-  try {
-    console.log(`Received message on topic ${topic}: ${message.toString()}`);
+  // MQTT connection events
+  mqttClient.on('connect', () => {
+    console.log('Connected to MQTT broker');
     
-    if (topic === 'simon_says/score') {
-      const scoreData = JSON.parse(message.toString());
+    // Subscribe to score topic
+    mqttClient.subscribe('simon_says/score', (err) => {
+      if (!err) {
+        console.log('Subscribed to simon_says/score');
+      }
+    });
+    
+    // Subscribe to device status topic
+    mqttClient.subscribe('simon_says/status', (err) => {
+      if (!err) {
+        console.log('Subscribed to simon_says/status');
+      }
+    });
+  });
+
+  mqttClient.on('error', (error) => {
+    console.error('MQTT Error:', error);
+  });
+
+  mqttClient.on('message', async (topic, message) => {
+    try {
+      console.log(`Received message on topic ${topic}: ${message.toString()}`);
       
-      // Import Score model
-      const Score = require('./models/scoreModel');
-      
-      // Create a new score entry
-      const score = new Score({
-        player: scoreData.player || 'Anonymous',
-        score: scoreData.score || 0,
-        timestamp: scoreData.timestamp || new Date()
-      });
-      
-      // Save to database
-      await score.save();
-      console.log('Score saved to database:', score);
+      if (topic === 'simon_says/score') {
+        const scoreData = JSON.parse(message.toString());
+        
+        // Import Score model
+        const Score = require('./models/scoreModel');
+        
+        // Create a new score entry
+        const score = new Score({
+          player: scoreData.player || 'Anonymous',
+          score: scoreData.score || 0,
+          timestamp: scoreData.timestamp || new Date()
+        });
+        
+        // Save to database
+        await score.save();
+        console.log('Score saved to database:', score);
+      }
+    } catch (error) {
+      console.error('Error processing MQTT message:', error);
     }
-  } catch (error) {
-    console.error('Error processing MQTT message:', error);
-  }
-});
+  });
+} catch (error) {
+  console.warn('MQTT connection failed, continuing without MQTT support:', error.message);
+  mqttClient = {
+    // Mock MQTT client methods to prevent errors
+    publish: (topic, message) => {
+      console.log(`[Mock MQTT] Would publish to ${topic}:`, message);
+      return true;
+    },
+    end: () => console.log('[Mock MQTT] Connection ended')
+  };
+}
 
 // Export MQTT client for use in other files
 exports.mqttClient = mqttClient;
