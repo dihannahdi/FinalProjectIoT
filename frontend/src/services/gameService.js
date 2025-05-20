@@ -1,9 +1,11 @@
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+
 // Start a new game with optional player name
-export const startGame = async (playerName = 'Anonymous') => {
+export const startGame = async (playerName) => {
   try {
-    const response = await axios.post('/api/game/start', { player: playerName });
+    const response = await axios.post(`${API_URL}/game/start`, { playerName });
     return response.data;
   } catch (error) {
     console.error('Error starting game:', error);
@@ -14,7 +16,7 @@ export const startGame = async (playerName = 'Anonymous') => {
 // Stop the current game
 export const stopGame = async () => {
   try {
-    const response = await axios.post('/api/game/stop');
+    const response = await axios.post(`${API_URL}/game/stop`);
     return response.data;
   } catch (error) {
     console.error('Error stopping game:', error);
@@ -25,7 +27,7 @@ export const stopGame = async () => {
 // Get the device status
 export const getDeviceStatus = async () => {
   try {
-    const response = await axios.get('/api/game/status');
+    const response = await axios.get(`${API_URL}/game/status`);
     return response.data;
   } catch (error) {
     console.error('Error getting device status:', error);
@@ -34,9 +36,9 @@ export const getDeviceStatus = async () => {
 };
 
 // Get the leaderboard
-export const getLeaderboard = async (limit = 10) => {
+export const getLeaderboard = async () => {
   try {
-    const response = await axios.get(`/api/scores/leaderboard?limit=${limit}`);
+    const response = await axios.get(`${API_URL}/game/leaderboard`);
     return response.data;
   } catch (error) {
     console.error('Error getting leaderboard:', error);
@@ -78,12 +80,11 @@ export const getMyScores = async (limit = 10) => {
 };
 
 // Submit a score manually (useful for testing)
-export const submitScore = async (player, score) => {
+export const submitScore = async (playerName, score) => {
   try {
-    const response = await axios.post('/api/scores', {
-      player,
+    const response = await axios.post(`${API_URL}/game/score`, {
+      playerName,
       score,
-      timestamp: new Date().toISOString()
     });
     return response.data;
   } catch (error) {
