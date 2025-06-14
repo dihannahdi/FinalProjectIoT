@@ -570,13 +570,22 @@
                         const timeDisplay = formatTimestamp(entry.timestamp);
                         const networkDisplay = entry.network || 'Unknown';
                         
+                        // Enhanced display with game statistics
+                        const levelDisplay = entry.level || 'N/A';
+                        const gameTimeDisplay = entry.gameTime ? `${(entry.gameTime / 1000).toFixed(1)}s` : 'N/A';
+                        const perfectGameIcon = entry.perfectGame ? ' 🏆' : '';
+                        const gameVersion = entry.stats?.gameVersion === 'improved_v1.0' ? ' ⚡' : '';
+                        
                         return `
                             <tr class="leaderboard-row ${rank <= 3 ? 'top-rank' : ''}" data-rank="${rank}">
                                 <td class="rank-cell">
                                     <span class="rank-display">${rankDisplay}</span>
                                 </td>
                                 <td class="name-cell">
-                                    <span class="player-name">${entry.name}</span>
+                                    <span class="player-name">${entry.name}${perfectGameIcon}${gameVersion}</span>
+                                    <div class="player-stats">
+                                        Level: ${levelDisplay} | Time: ${gameTimeDisplay}
+                                    </div>
                                 </td>
                                 <td class="score-cell">
                                     <span class="score-value">${entry.score}</span>

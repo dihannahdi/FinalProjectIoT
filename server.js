@@ -109,10 +109,10 @@ app.post('/start-game', (req, res) => {
     }
 });
 
-// Enhanced API endpoint to submit score (with leaderboard position)
+// Enhanced API endpoint to submit score (with detailed analytics)
 app.post('/submit-score', async (req, res) => {
     try {
-        const { name, score, network, deviceId, timestamp } = req.body;
+        const { name, score, network, deviceId, timestamp, level, gameTime, perfectGame } = req.body;
 
         // Validation
         if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -130,10 +130,13 @@ app.post('/submit-score', async (req, res) => {
         // Read current leaderboard
         let leaderboard = await readLeaderboard();
 
-        // Add new score with enhanced data
+        // Add new score with enhanced analytics data
         const newEntry = {
             name: name.trim(),
             score: score,
+            level: level || 1,
+            gameTime: gameTime || 0,
+            perfectGame: perfectGame || false,
             timestamp: new Date().toISOString(),
             network: network || 'Unknown',
             deviceId: deviceId || 'Unknown'
@@ -151,22 +154,37 @@ app.post('/submit-score', async (req, res) => {
             entry.timestamp === newEntry.timestamp
         ) + 1;
 
+        // Calculate statistics
+        const playerScores = leaderboard.filter(entry => entry.name === name.trim());
+        const personalBest = Math.max(...playerScores.map(entry => entry.score));
+        const averageScore = playerScores.reduce((sum, entry) => sum + entry.score, 0) / playerScores.length;
+        const gamesPlayed = playerScores.length;
+
         // Keep only top 100 entries
         leaderboard = leaderboard.slice(0, 100);
 
         // Write back to file
         await writeLeaderboard(leaderboard);
 
-        console.log(`📊 Score submitted: ${name} - Score: ${score} - Position: #${position}`);
+        console.log(`🎮 Enhanced Score: ${name} - Score: ${score} - Level: ${level} - Time: ${gameTime}ms - Perfect: ${perfectGame} - Position: #${position}`);
         
-        // Enhanced response with leaderboard position
+        // Enhanced response with detailed analytics
         res.status(200).json({ 
             success: true,
             message: 'Score submitted successfully',
             position: position,
             totalPlayers: leaderboard.length,
             playerName: name.trim(),
-            score: score
+            score: score,
+            level: level,
+            gameTime: gameTime,
+            perfectGame: perfectGame,
+            analytics: {
+                personalBest: personalBest,
+                averageScore: Math.round(averageScore),
+                gamesPlayed: gamesPlayed,
+                improvement: score >= personalBest ? 'new_record' : 'normal'
+            }
         });
 
     } catch (error) {

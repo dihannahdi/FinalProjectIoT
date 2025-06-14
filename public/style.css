@@ -228,6 +228,13 @@ body {
     color: #1f2937;
 }
 
+.player-stats {
+    font-size: 0.75rem;
+    color: #7f8c8d;
+    margin-top: 2px;
+    font-weight: 400;
+}
+
 .score-cell {
     text-align: center;
 }
