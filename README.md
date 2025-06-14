@@ -11,9 +11,11 @@ Proyek ini terdiri dari dua komponen utama:
 ## 📋 Daftar File
 
 ```
-simon-says-iot/
+Final/
 ├── server.js           # Server Express.js
 ├── package.json        # Dependencies Node.js
+├── package-lock.json   # Locked dependencies versions
+├── .gitignore         # Git ignore rules
 ├── public/
 │   ├── index.html     # Frontend leaderboard
 │   └── style.css      # Styling responsif
@@ -63,13 +65,13 @@ pm2 --version
 
 ```bash
 # Dari komputer lokal, upload file ke server
-scp -r simon-says-iot/ username@10.33.102.140:/home/username/
+scp -r Final/ username@10.33.102.140:/home/username/
 
 # SSH ke server
 ssh username@10.33.102.140
 
 # Masuk ke direktori proyek
-cd /home/username/simon-says-iot/
+cd /home/username/Final/
 ```
 
 #### Option B: Clone dari Git Repository
@@ -78,9 +80,13 @@ cd /home/username/simon-says-iot/
 # SSH ke server
 ssh username@10.33.102.140
 
-# Clone repository (jika sudah di upload ke Git)
-git clone <your-repository-url> simon-says-iot
-cd simon-says-iot/
+# Clone repository
+git clone https://github.com/[username]/[repository-name].git Final
+cd Final/
+
+# Atau jika repository sudah di-clone, update saja:
+cd Final/
+git pull origin main
 ```
 
 ### 5. Install Dependencies
@@ -761,8 +767,8 @@ Solution:
 
 ```bash
 # Clone atau download project ini
-git clone [repository-url]
-cd simon-says-leaderboard
+git clone https://github.com/[username]/[repository-name].git Final
+cd Final
 
 # Install dependencies
 npm install

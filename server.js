@@ -41,6 +41,9 @@ async function writeLeaderboard(data) {
 app.get('/check-game-trigger', (req, res) => {
     const deviceId = req.headers['device-id'];
     
+    // DEBUG: Log all trigger checks
+    console.log(`🔍 Device ${deviceId} checking for trigger - Status: ${gameTrigger.startGame ? 'ACTIVE' : 'WAITING'}`);
+    
     if (gameTrigger.startGame) {
         console.log(`🎮 Game trigger sent to device: ${deviceId}`);
         console.log(`👤 Player: ${gameTrigger.playerName}`);
@@ -51,13 +54,19 @@ app.get('/check-game-trigger', (req, res) => {
             playerName: gameTrigger.playerName
         };
         
-        // Reset trigger after sending (single use)
-        gameTrigger = {
-            startGame: false,
-            playerName: '',
-            triggeredAt: null,
-            deviceId: null
-        };
+        // Keep trigger active for 30 seconds or until device confirms
+        const triggerAge = Date.now() - new Date(gameTrigger.triggeredAt).getTime();
+        if (triggerAge > 30000) { // 30 seconds timeout
+            console.log(`⏰ Trigger expired after 30 seconds, resetting`);
+            gameTrigger = {
+                startGame: false,
+                playerName: '',
+                triggeredAt: null,
+                deviceId: null
+            };
+        } else {
+            console.log(`⏱️  Trigger still active (${Math.floor(triggerAge/1000)}s old), keeping available for other polls`);
+        }
         
         res.json(triggerData);
     } else {
@@ -188,6 +197,18 @@ app.get('/api/game-status', (req, res) => {
         currentPlayer: gameTrigger.playerName,
         triggeredAt: gameTrigger.triggeredAt
     });
+});
+
+// Manual reset endpoint for testing
+app.post('/reset-trigger', (req, res) => {
+    console.log('🔄 Manually resetting game trigger');
+    gameTrigger = {
+        startGame: false,
+        playerName: '',
+        triggeredAt: null,
+        deviceId: null
+    };
+    res.json({ success: true, message: 'Trigger reset successfully' });
 });
 
 // Serve the main page

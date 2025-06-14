@@ -37,16 +37,16 @@ struct WiFiConfig {
   const char* description;
 };
 
-// Define multiple WiFi networks (priority order - MOST SECURE FIRST)
+// Define multiple WiFi networks (priority order - UGM NETWORK FIRST FOR VPS ACCESS)
 WiFiConfig wifiNetworks[] = {
-  // RECOMMENDED: Mobile hotspot (Most secure and reliable for this project)
-  {"farid_hotspot", "hotspot123", "", false, "Mobile Hotspot (Primary)"},
+  // PRIMARY: UGM Enterprise - Try with domain format
+  {"UGM-Secure", "Alhamdulillah33kali", "fariddihannahdi@ugm.ac.id", true, "UGM Enterprise (Domain Format)"},
   
-  // BACKUP: Personal WiFi (available at home)
-  {"nahdii", "bismillah2", "", false, "Personal WiFi (Backup)"},
+  // BACKUP: UGM Enterprise - Try without domain
+  {"UGM-Secure", "Alhamdulillah33kali", "fariddihannahdi", true, "UGM Enterprise (Simple Format)"},
   
-  // FALLBACK: UGM Enterprise (campus only, less secure)
-  {"UGM-Secure", "Alhamdulillah33kali", "fariddihannahdi", true, "UGM Enterprise (Fallback)"}
+  // FALLBACK: Personal WiFi (for local testing)
+  {"nahdii", "bismillah2", "", false, "Personal WiFi (Local Only)"}
 };
 
 const int numWiFiNetworks = sizeof(wifiNetworks) / sizeof(wifiNetworks[0]);
@@ -54,6 +54,8 @@ int currentWiFiIndex = -1;
 
 // Server configuration
 const char* serverIp = "10.33.102.140";       // IP server VPS (accessible from internet)
+// For testing: If ESP8266 can't reach server, try:
+// const char* serverIp = "192.168.1.100";  // Replace with your actual server IP on local network
 const int serverPort = 3000;                   // Port server
 const char* playerName = "fariddihannahdi";    // Nama pemain
 
@@ -286,12 +288,29 @@ bool connectToWiFi(int networkIndex) {
   if (network.isEnterprise) {
     // Enterprise WiFi connection
     Serial.println("Configuring WPA2 Enterprise...");
+    Serial.print("Username: ");
+    Serial.println(network.username);
+    Serial.print("SSID: ");
+    Serial.println(network.ssid);
     
+    // Clear any existing enterprise configuration
+    wifi_station_clear_enterprise_ca_cert();
+    wifi_station_clear_enterprise_identity();
+    wifi_station_clear_enterprise_username();
+    wifi_station_clear_enterprise_password();
+    
+    // Set enterprise configuration with proper PEAP/MSCHAPV2
     wifi_station_set_enterprise_ca_cert(NULL, 0);
     wifi_station_set_enterprise_identity((uint8*)network.username, strlen(network.username));
     wifi_station_set_enterprise_username((uint8*)network.username, strlen(network.username));
     wifi_station_set_enterprise_password((uint8*)network.password, strlen(network.password));
-    wifi_station_set_wpa2_enterprise_auth(1);
+    
+    // Set EAP method - try PEAP first (most common for UGM)
+    wifi_station_set_enterprise_new_password((uint8*)network.password, strlen(network.password));
+    wifi_station_set_wpa2_enterprise_auth(1); // WPA2_AUTH_UNSPECIFIED
+    
+    // Additional delay for enterprise setup
+    delay(2000);
     
     WiFi.begin(network.ssid);
   } else {
@@ -302,7 +321,7 @@ bool connectToWiFi(int networkIndex) {
   
   // Wait for connection
   int attempts = 0;
-  int maxAttempts = network.isEnterprise ? 40 : 20; // More time for enterprise
+  int maxAttempts = network.isEnterprise ? 60 : 20; // More time for enterprise
   
   while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
     delay(500);
@@ -325,6 +344,18 @@ bool connectToWiFi(int networkIndex) {
       Serial.print("/");
       Serial.print(maxAttempts);
       Serial.println(")");
+      
+      // For enterprise networks, try alternative auth method after 20 attempts
+      if (network.isEnterprise && attempts == 20) {
+        Serial.println("Trying alternative enterprise authentication...");
+        WiFi.disconnect(true);
+        delay(1000);
+        
+        // Try with different auth method
+        wifi_station_set_wpa2_enterprise_auth(0); // WPA2_AUTH_OPEN
+        WiFi.begin(network.ssid);
+        delay(1000);
+      }
     }
   }
   
@@ -357,14 +388,24 @@ void checkWebTrigger() {
   
   String checkURL = "http://" + String(serverIp) + ":" + String(serverPort) + "/check-game-trigger";
   
+  // DEBUG: Show what we're trying to connect to
+  Serial.print("🔍 Polling server: ");
+  Serial.println(checkURL);
+  
   if (http.begin(client, checkURL)) {
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Device-ID", "ESP8266-Simon-" + WiFi.macAddress());
     
+    Serial.print("📡 Sending GET request... ");
     int httpResponseCode = http.GET();
+    
+    Serial.print("Response code: ");
+    Serial.println(httpResponseCode);
     
     if (httpResponseCode == 200) {
       String response = http.getString();
+      Serial.print("📥 Server response: ");
+      Serial.println(response);
       
       // Parse JSON response
       StaticJsonDocument<300> doc;
@@ -387,10 +428,23 @@ void checkWebTrigger() {
         delay(600);
         noTone(buzzer);
         flashAllLeds(2, 200);
+      } else {
+        Serial.println("⏳ No game trigger from web");
       }
+    } else if (httpResponseCode > 0) {
+      Serial.print("❌ HTTP Error: ");
+      Serial.println(httpResponseCode);
+      String response = http.getString();
+      Serial.print("Error response: ");
+      Serial.println(response);
+    } else {
+      Serial.print("❌ Connection failed: ");
+      Serial.println(httpResponseCode);
     }
     
     http.end();
+  } else {
+    Serial.println("❌ Failed to initialize HTTP client");
   }
 }
 
