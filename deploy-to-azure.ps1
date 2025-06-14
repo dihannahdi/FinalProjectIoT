@@ -103,7 +103,7 @@ try {
     
     # Configure app settings
     Write-Host "Configuring application settings..." -ForegroundColor Cyan
-    az webapp config appsettings set --resource-group $ResourceGroupName --name $AppServiceName --settings NODE_ENV=production WEBSITE_NODE_DEFAULT_VERSION=18-lts --output none
+    az webapp config appsettings set --resource-group $ResourceGroupName --name $AppServiceName --settings NODE_ENV=production WEBSITE_NODE_DEFAULT_VERSION=22-lts --output none
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "SUCCESS: Application settings configured" -ForegroundColor Green

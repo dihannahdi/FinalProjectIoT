@@ -75,7 +75,7 @@ Fill in these details:
 2. Click **"Application settings"**
 3. Add these settings:
    - **Name**: `NODE_ENV`, **Value**: `production`
-   - **Name**: `WEBSITE_NODE_DEFAULT_VERSION`, **Value**: `18-lts`
+   - **Name**: `WEBSITE_NODE_DEFAULT_VERSION`, **Value**: `22-lts`
 4. Click **"Save"**
 
 ## Step 9: Test Your Application
