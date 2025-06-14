@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simon Says - Leaderboard IoT</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1 class="title">
+                    <span class="game-title">Simon Says</span>
+                    <span class="subtitle">Leaderboard IoT</span>
+                </h1>
+                <div class="status-indicator">
+                    <div class="status-dot" id="status-dot"></div>
+                    <span class="status-text" id="status-text">Memuat...</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="leaderboard-container">
+                <div class="leaderboard-header">
+                    <h2>🏆 Peringkat Teratas</h2>
+                    <div class="refresh-info">
+                        <span id="refresh-timer">Diperbarui otomatis setiap 20 detik</span>
+                        <button class="refresh-btn" id="manual-refresh" onclick="loadLeaderboard()">
+                            🔄 Refresh Manual
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="leaderboard-table" id="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th class="rank-col">Peringkat</th>
+                                <th class="name-col">Nama Pemain</th>
+                                <th class="score-col">Skor</th>
+                                <th class="time-col">Waktu</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-tbody">
+                            <!-- Data akan dimuat melalui JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="empty-state" id="empty-state" style="display: none;">
+                    <div class="empty-icon">🎮</div>
+                    <h3>Belum Ada Skor</h3>
+                    <p>Mulai bermain Simon Says untuk melihat skor di leaderboard!</p>
+                </div>
+
+                <div class="error-state" id="error-state" style="display: none;">
+                    <div class="error-icon">⚠️</div>
+                    <h3>Terjadi Kesalahan</h3>
+                    <p id="error-message">Tidak dapat memuat data leaderboard.</p>
+                    <button class="retry-btn" onclick="loadLeaderboard()">Coba Lagi</button>
+                </div>
+            </div>
+
+            <div class="stats-container">
+                <div class="stat-card">
+                    <div class="stat-number" id="total-games">0</div>
+                    <div class="stat-label">Total Permainan</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="highest-score">0</div>
+                    <div class="stat-label">Skor Tertinggi</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="average-score">0</div>
+                    <div class="stat-label">Rata-rata Skor</div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2024 Simon Says IoT Leaderboard - Praktikum IoT Final Project</p>
+            <p>Server: <code>10.33.102.140</code> | Status: <span id="server-status">Online</span></p>
+        </footer>
+    </div>
+
+    <script>
+        let refreshInterval;
+        let nextRefreshTime = 20;
+
+        // Function to format timestamp
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHours / 24);
+
+            if (diffMins < 1) return 'Baru saja';
+            if (diffMins < 60) return `${diffMins} menit lalu`;
+            if (diffHours < 24) return `${diffHours} jam lalu`;
+            if (diffDays < 7) return `${diffDays} hari lalu`;
+            
+            return date.toLocaleDateString('id-ID', { 
+                day: 'numeric', 
+                month: 'short', 
+                year: 'numeric' 
+            });
+        }
+
+        // Function to get rank emoji
+        function getRankEmoji(rank) {
+            switch(rank) {
+                case 1: return '🥇';
+                case 2: return '🥈';
+                case 3: return '🥉';
+                default: return `#${rank}`;
+            }
+        }
+
+        // Function to update status
+        function updateStatus(status, message) {
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            const serverStatus = document.getElementById('server-status');
+            
+            statusDot.className = `status-dot ${status}`;
+            statusText.textContent = message;
+            serverStatus.textContent = status === 'online' ? 'Online' : 'Offline';
+        }
+
+        // Function to calculate and display statistics
+        function updateStatistics(data) {
+            const totalGames = data.length;
+            const highestScore = data.length > 0 ? Math.max(...data.map(entry => entry.score)) : 0;
+            const averageScore = data.length > 0 ? Math.round(data.reduce((sum, entry) => sum + entry.score, 0) / data.length) : 0;
+
+            document.getElementById('total-games').textContent = totalGames;
+            document.getElementById('highest-score').textContent = highestScore;
+            document.getElementById('average-score').textContent = averageScore;
+        }
+
+        // Function to load leaderboard data
+        async function loadLeaderboard() {
+            try {
+                updateStatus('loading', 'Memuat data...');
+                
+                const response = await fetch('/api/leaderboard');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                const tbody = document.getElementById('leaderboard-tbody');
+                const emptyState = document.getElementById('empty-state');
+                const errorState = document.getElementById('error-state');
+                const tableContainer = document.querySelector('.table-container');
+                
+                // Hide error state
+                errorState.style.display = 'none';
+                
+                if (data.length === 0) {
+                    // Show empty state
+                    tableContainer.style.display = 'none';
+                    emptyState.style.display = 'block';
+                    updateStatistics([]);
+                } else {
+                    // Show table with data
+                    emptyState.style.display = 'none';
+                    tableContainer.style.display = 'block';
+                    
+                    tbody.innerHTML = data.map((entry, index) => {
+                        const rank = index + 1;
+                        const rankDisplay = getRankEmoji(rank);
+                        const timeDisplay = formatTimestamp(entry.timestamp);
+                        
+                        return `
+                            <tr class="leaderboard-row ${rank <= 3 ? 'top-rank' : ''}" data-rank="${rank}">
+                                <td class="rank-cell">
+                                    <span class="rank-display">${rankDisplay}</span>
+                                </td>
+                                <td class="name-cell">
+                                    <span class="player-name">${entry.name}</span>
+                                </td>
+                                <td class="score-cell">
+                                    <span class="score-value">${entry.score}</span>
+                                </td>
+                                <td class="time-cell">
+                                    <span class="time-value">${timeDisplay}</span>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                    
+                    updateStatistics(data);
+                }
+                
+                updateStatus('online', 'Data terbaru');
+                
+            } catch (error) {
+                console.error('Error loading leaderboard:', error);
+                
+                // Show error state
+                document.querySelector('.table-container').style.display = 'none';
+                document.getElementById('empty-state').style.display = 'none';
+                
+                const errorState = document.getElementById('error-state');
+                const errorMessage = document.getElementById('error-message');
+                
+                errorMessage.textContent = `Gagal memuat data: ${error.message}`;
+                errorState.style.display = 'block';
+                
+                updateStatus('offline', 'Koneksi bermasalah');
+            }
+        }
+
+        // Function to start refresh timer
+        function startRefreshTimer() {
+            const timerElement = document.getElementById('refresh-timer');
+            
+            // Clear existing interval
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            
+            nextRefreshTime = 20;
+            
+            refreshInterval = setInterval(() => {
+                nextRefreshTime--;
+                
+                if (nextRefreshTime <= 0) {
+                    loadLeaderboard();
+                    nextRefreshTime = 20;
+                }
+                
+                timerElement.textContent = `Diperbarui otomatis dalam ${nextRefreshTime} detik`;
+            }, 1000);
+        }
+
+        // Initialize the application
+        function init() {
+            console.log('Simon Says Leaderboard initialized');
+            loadLeaderboard();
+            startRefreshTimer();
+        }
+
+        // Handle page visibility change (pause/resume timer when tab is not active)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                }
+            } else {
+                startRefreshTimer();
+                loadLeaderboard(); // Refresh data when tab becomes active
+            }
+        });
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', init);
+
+        // Handle window beforeunload
+        window.addEventListener('beforeunload', () => {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+</body>
+</html> 
