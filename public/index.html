@@ -3,35 +3,247 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simon Says - Leaderboard IoT</title>
+    <title>Simon Says IoT - Web Triggered Game</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Additional styles for game interface */
+        .game-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 20px;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .player-form {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .name-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            background: rgba(255,255,255,0.9);
+            color: #333;
+        }
+        
+        .start-btn {
+            padding: 12px 24px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+        
+        .start-btn:hover:not(:disabled) {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+        
+        .start-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .game-status {
+            background: rgba(255,255,255,0.1);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+        
+        .status-dot.online { background: #4CAF50; }
+        .status-dot.offline { background: #f44336; }
+        .status-dot.waiting { background: #ff9800; }
+        .status-dot.active { background: #2196F3; animation: pulse 2s infinite; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .hardware-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .hardware-card {
+            background: rgba(255,255,255,0.1);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .recent-games {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .game-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .game-item:last-child {
+            border-bottom: none;
+        }
+        
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .player-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .score-badge {
+            background: #4CAF50;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .position-badge {
+            background: #ff9800;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .position-badge.gold { background: #FFD700; color: #333; }
+        .position-badge.silver { background: #C0C0C0; color: #333; }
+        .position-badge.bronze { background: #CD7F32; color: white; }
+    </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
             <div class="header-content">
                 <h1 class="title">
-                    <span class="game-title">Simon Says</span>
-                    <span class="subtitle">Leaderboard IoT</span>
+                    <span class="game-title">🎮 Simon Says IoT</span>
+                    <span class="subtitle">Web-Triggered Game</span>
                 </h1>
-                <div class="status-indicator">
-                    <div class="status-dot" id="status-dot"></div>
-                    <span class="status-text" id="status-text">Memuat...</span>
-                </div>
             </div>
         </header>
 
         <main class="main-content">
+            <!-- Game Control Section -->
+            <div class="game-section">
+                <h2>🚀 Start New Game</h2>
+                <div class="player-form">
+                    <input type="text" id="playerName" class="name-input" placeholder="Masukkan nama Anda..." maxlength="20">
+                    <button id="startBtn" class="start-btn" onclick="startGame()">
+                        <span id="btnText">🎯 Mulai Game</span>
+                    </button>
+                </div>
+                
+                <div class="game-status">
+                    <div class="status-indicator">
+                        <div class="status-dot" id="gameStatusDot"></div>
+                        <span id="gameStatusText">Menunggu pemain...</span>
+                    </div>
+                    <div id="gameInstructions">
+                        <p><strong>Cara bermain:</strong></p>
+                        <ol>
+                            <li>Masukkan nama Anda di atas</li>
+                            <li>Klik "Mulai Game" untuk memulai</li>
+                            <li>Perhatikan urutan LED yang menyala pada hardware</li>
+                            <li>Tekan tombol sesuai urutan yang ditampilkan</li>
+                            <li>Skor akan otomatis tersimpan di leaderboard</li>
+                        </ol>
+                    </div>
+                </div>
+                
+                <div class="hardware-status">
+                    <div class="hardware-card">
+                        <div class="status-indicator">
+                            <div class="status-dot" id="hardwareStatusDot"></div>
+                            <span>Hardware ESP8266</span>
+                        </div>
+                        <div id="hardwareStatusText">Checking...</div>
+                    </div>
+                    <div class="hardware-card">
+                        <div class="status-indicator">
+                            <div class="status-dot" id="serverStatusDot"></div>
+                            <span>Server Status</span>
+                        </div>
+                        <div id="serverStatusText">Online</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Games Section -->
+            <div class="recent-games">
+                <h2>🕐 Recent Games</h2>
+                <div id="recentGames">
+                    <div class="empty-state">
+                        <p>Belum ada game yang dimainkan. Mulai game pertama Anda!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Leaderboard Section -->
             <div class="leaderboard-container">
                 <div class="leaderboard-header">
-                    <h2>🏆 Peringkat Teratas</h2>
+                    <h2>🏆 Top Players</h2>
                     <div class="refresh-info">
-                        <span id="refresh-timer">Diperbarui otomatis setiap 20 detik</span>
+                        <span id="refresh-timer">Diperbarui otomatis setiap 10 detik</span>
                         <button class="refresh-btn" id="manual-refresh" onclick="loadLeaderboard()">
-                            🔄 Refresh Manual
+                            🔄 Refresh
                         </button>
                     </div>
                 </div>
@@ -40,10 +252,11 @@
                     <table class="leaderboard-table" id="leaderboard-table">
                         <thead>
                             <tr>
-                                <th class="rank-col">Peringkat</th>
-                                <th class="name-col">Nama Pemain</th>
-                                <th class="score-col">Skor</th>
-                                <th class="time-col">Waktu</th>
+                                <th class="rank-col">Rank</th>
+                                <th class="name-col">Player</th>
+                                <th class="score-col">Score</th>
+                                <th class="time-col">Time</th>
+                                <th class="network-col">Network</th>
                             </tr>
                         </thead>
                         <tbody id="leaderboard-tbody">
@@ -66,31 +279,215 @@
                 </div>
             </div>
 
+            <!-- Statistics -->
             <div class="stats-container">
                 <div class="stat-card">
                     <div class="stat-number" id="total-games">0</div>
-                    <div class="stat-label">Total Permainan</div>
+                    <div class="stat-label">Total Games</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-number" id="highest-score">0</div>
-                    <div class="stat-label">Skor Tertinggi</div>
+                    <div class="stat-label">Highest Score</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-number" id="average-score">0</div>
-                    <div class="stat-label">Rata-rata Skor</div>
+                    <div class="stat-label">Average Score</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="active-players">0</div>
+                    <div class="stat-label">Active Players</div>
                 </div>
             </div>
         </main>
 
         <footer class="footer">
-            <p>&copy; 2024 Simon Says IoT Leaderboard - Praktikum IoT Final Project</p>
-            <p>Server: <code>10.33.102.140</code> | Status: <span id="server-status">Online</span></p>
+            <p>&copy; 2024 Simon Says IoT - Web Triggered Game</p>
+            <p>Server: <code>10.33.102.140:3000</code> | ESP8266: <span id="esp8266-status">Checking...</span></p>
         </footer>
     </div>
 
     <script>
         let refreshInterval;
-        let nextRefreshTime = 20;
+        let nextRefreshTime = 10;
+        let gameCheckInterval;
+        let recentGamesData = [];
+
+        // Game state
+        let currentGame = {
+            isActive: false,
+            playerName: '',
+            startTime: null
+        };
+
+        // Function to start a new game
+        async function startGame() {
+            const playerName = document.getElementById('playerName').value.trim();
+            
+            if (!playerName) {
+                alert('Masukkan nama Anda terlebih dahulu!');
+                return;
+            }
+            
+            if (playerName.length < 2) {
+                alert('Nama minimal 2 karakter!');
+                return;
+            }
+            
+            const startBtn = document.getElementById('startBtn');
+            const btnText = document.getElementById('btnText');
+            
+            try {
+                // Disable button and show loading
+                startBtn.disabled = true;
+                btnText.textContent = '🔄 Memulai Game...';
+                
+                // Send start game request
+                const response = await fetch('/start-game', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ playerName })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Gagal memulai game');
+                }
+                
+                const result = await response.json();
+                
+                // Update UI
+                updateGameStatus('active', `Game dimulai untuk ${playerName}! Perhatikan hardware...`);
+                btnText.textContent = '🎮 Game Aktif';
+                
+                // Set current game
+                currentGame = {
+                    isActive: true,
+                    playerName: playerName,
+                    startTime: new Date()
+                };
+                
+                // Start monitoring game
+                startGameMonitoring();
+                
+                console.log('Game started:', result);
+                
+            } catch (error) {
+                console.error('Error starting game:', error);
+                alert('Gagal memulai game. Coba lagi!');
+                
+                // Reset button
+                startBtn.disabled = false;
+                btnText.textContent = '🎯 Mulai Game';
+            }
+        }
+
+        // Function to monitor game status
+        function startGameMonitoring() {
+            // Clear existing interval
+            if (gameCheckInterval) {
+                clearInterval(gameCheckInterval);
+            }
+            
+            // Check every 5 seconds
+            gameCheckInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/game-status');
+                    const status = await response.json();
+                    
+                    if (!status.isGameActive && currentGame.isActive) {
+                        // Game finished
+                        gameFinished();
+                    }
+                } catch (error) {
+                    console.error('Error checking game status:', error);
+                }
+            }, 5000);
+        }
+
+        // Function called when game finishes
+        function gameFinished() {
+            currentGame.isActive = false;
+            
+            // Reset UI
+            const startBtn = document.getElementById('startBtn');
+            const btnText = document.getElementById('btnText');
+            
+            startBtn.disabled = false;
+            btnText.textContent = '🎯 Mulai Game';
+            
+            updateGameStatus('online', 'Game selesai! Siap untuk pemain berikutnya.');
+            
+            // Clear name input
+            document.getElementById('playerName').value = '';
+            
+            // Stop monitoring
+            if (gameCheckInterval) {
+                clearInterval(gameCheckInterval);
+            }
+            
+            // Refresh leaderboard
+            setTimeout(() => {
+                loadLeaderboard();
+                loadRecentGames();
+            }, 2000);
+        }
+
+        // Function to update game status
+        function updateGameStatus(status, message) {
+            const statusDot = document.getElementById('gameStatusDot');
+            const statusText = document.getElementById('gameStatusText');
+            
+            statusDot.className = `status-dot ${status}`;
+            statusText.textContent = message;
+        }
+
+        // Function to load recent games
+        async function loadRecentGames() {
+            try {
+                const response = await fetch('/api/leaderboard?limit=5');
+                const data = await response.json();
+                
+                const recentGamesDiv = document.getElementById('recentGames');
+                
+                if (data.length === 0) {
+                    recentGamesDiv.innerHTML = '<div class="empty-state"><p>Belum ada game yang dimainkan.</p></div>';
+                    return;
+                }
+                
+                recentGamesData = data.slice(0, 5);
+                
+                recentGamesDiv.innerHTML = recentGamesData.map((game, index) => {
+                    const timeAgo = formatTimestamp(game.timestamp);
+                    const playerInitial = game.name.charAt(0).toUpperCase();
+                    const position = index + 1;
+                    
+                    let positionClass = 'position-badge';
+                    if (position === 1) positionClass += ' gold';
+                    else if (position === 2) positionClass += ' silver';
+                    else if (position === 3) positionClass += ' bronze';
+                    
+                    return `
+                        <div class="game-item">
+                            <div class="player-info">
+                                <div class="player-avatar">${playerInitial}</div>
+                                <div>
+                                    <div style="font-weight: 600;">${game.name}</div>
+                                    <div style="font-size: 0.9rem; color: #666;">${timeAgo}</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <span class="score-badge">Score: ${game.score}</span>
+                                <span class="${positionClass}">#${position}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+            } catch (error) {
+                console.error('Error loading recent games:', error);
+            }
+        }
 
         // Function to format timestamp
         function formatTimestamp(timestamp) {
@@ -123,33 +520,24 @@
             }
         }
 
-        // Function to update status
-        function updateStatus(status, message) {
-            const statusDot = document.getElementById('status-dot');
-            const statusText = document.getElementById('status-text');
-            const serverStatus = document.getElementById('server-status');
-            
-            statusDot.className = `status-dot ${status}`;
-            statusText.textContent = message;
-            serverStatus.textContent = status === 'online' ? 'Online' : 'Offline';
-        }
-
         // Function to calculate and display statistics
         function updateStatistics(data) {
             const totalGames = data.length;
             const highestScore = data.length > 0 ? Math.max(...data.map(entry => entry.score)) : 0;
             const averageScore = data.length > 0 ? Math.round(data.reduce((sum, entry) => sum + entry.score, 0) / data.length) : 0;
+            
+            // Get unique players
+            const uniquePlayers = new Set(data.map(entry => entry.name)).size;
 
             document.getElementById('total-games').textContent = totalGames;
             document.getElementById('highest-score').textContent = highestScore;
             document.getElementById('average-score').textContent = averageScore;
+            document.getElementById('active-players').textContent = uniquePlayers;
         }
 
         // Function to load leaderboard data
         async function loadLeaderboard() {
             try {
-                updateStatus('loading', 'Memuat data...');
-                
                 const response = await fetch('/api/leaderboard');
                 
                 if (!response.ok) {
@@ -180,6 +568,7 @@
                         const rank = index + 1;
                         const rankDisplay = getRankEmoji(rank);
                         const timeDisplay = formatTimestamp(entry.timestamp);
+                        const networkDisplay = entry.network || 'Unknown';
                         
                         return `
                             <tr class="leaderboard-row ${rank <= 3 ? 'top-rank' : ''}" data-rank="${rank}">
@@ -195,6 +584,9 @@
                                 <td class="time-cell">
                                     <span class="time-value">${timeDisplay}</span>
                                 </td>
+                                <td class="network-cell">
+                                    <span class="network-value">${networkDisplay}</span>
+                                </td>
                             </tr>
                         `;
                     }).join('');
@@ -202,7 +594,9 @@
                     updateStatistics(data);
                 }
                 
-                updateStatus('online', 'Data terbaru');
+                // Update server status
+                document.getElementById('serverStatusDot').className = 'status-dot online';
+                document.getElementById('serverStatusText').textContent = 'Online';
                 
             } catch (error) {
                 console.error('Error loading leaderboard:', error);
@@ -217,7 +611,9 @@
                 errorMessage.textContent = `Gagal memuat data: ${error.message}`;
                 errorState.style.display = 'block';
                 
-                updateStatus('offline', 'Koneksi bermasalah');
+                // Update server status
+                document.getElementById('serverStatusDot').className = 'status-dot offline';
+                document.getElementById('serverStatusText').textContent = 'Offline';
             }
         }
 
@@ -230,28 +626,63 @@
                 clearInterval(refreshInterval);
             }
             
-            nextRefreshTime = 20;
+            nextRefreshTime = 10;
             
             refreshInterval = setInterval(() => {
                 nextRefreshTime--;
                 
                 if (nextRefreshTime <= 0) {
                     loadLeaderboard();
-                    nextRefreshTime = 20;
+                    loadRecentGames();
+                    nextRefreshTime = 10;
                 }
                 
                 timerElement.textContent = `Diperbarui otomatis dalam ${nextRefreshTime} detik`;
             }, 1000);
         }
 
-        // Initialize the application
-        function init() {
-            console.log('Simon Says Leaderboard initialized');
-            loadLeaderboard();
-            startRefreshTimer();
+        // Function to check hardware status
+        async function checkHardwareStatus() {
+            try {
+                const response = await fetch('/api/game-status');
+                const status = await response.json();
+                
+                // Update hardware status
+                document.getElementById('hardwareStatusDot').className = 'status-dot online';
+                document.getElementById('hardwareStatusText').textContent = 'Connected';
+                document.getElementById('esp8266-status').textContent = 'Online';
+                
+            } catch (error) {
+                document.getElementById('hardwareStatusDot').className = 'status-dot offline';
+                document.getElementById('hardwareStatusText').textContent = 'Disconnected';
+                document.getElementById('esp8266-status').textContent = 'Offline';
+            }
         }
 
-        // Handle page visibility change (pause/resume timer when tab is not active)
+        // Initialize the application
+        function init() {
+            console.log('Simon Says IoT Web Interface initialized');
+            updateGameStatus('online', 'Siap untuk memulai game baru!');
+            loadLeaderboard();
+            loadRecentGames();
+            checkHardwareStatus();
+            startRefreshTimer();
+            
+            // Set up periodic hardware check
+            setInterval(checkHardwareStatus, 30000); // Check every 30 seconds
+        }
+
+        // Handle Enter key in name input
+        document.addEventListener('DOMContentLoaded', () => {
+            const nameInput = document.getElementById('playerName');
+            nameInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    startGame();
+                }
+            });
+        });
+
+        // Handle page visibility change
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 if (refreshInterval) {
@@ -259,7 +690,8 @@
                 }
             } else {
                 startRefreshTimer();
-                loadLeaderboard(); // Refresh data when tab becomes active
+                loadLeaderboard();
+                loadRecentGames();
             }
         });
 
@@ -270,6 +702,9 @@
         window.addEventListener('beforeunload', () => {
             if (refreshInterval) {
                 clearInterval(refreshInterval);
+            }
+            if (gameCheckInterval) {
+                clearInterval(gameCheckInterval);
             }
         });
     </script>

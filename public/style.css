@@ -467,6 +467,37 @@ body {
     }
 }
 
+/* Network column styling */
+.network-col { 
+    width: 120px; 
+    text-align: center; 
+}
+
+.network-cell {
+    padding: 12px 8px;
+}
+
+.network-value {
+    font-size: 0.85rem;
+    color: #666;
+    background: #f0f0f0;
+    padding: 2px 8px;
+    border-radius: 12px;
+    display: inline-block;
+}
+
+/* Empty state styling enhancement */
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: #666;
+}
+
+.empty-state p {
+    margin: 0;
+    font-style: italic;
+}
+
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
     body {
@@ -498,5 +529,10 @@ body {
     .empty-state h3,
     .error-state h3 {
         color: #e5e7eb;
+    }
+    
+    .network-value {
+        background: #374151;
+        color: #d1d5db;
     }
 } 

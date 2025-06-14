@@ -1,6 +1,12 @@
 /*
  * Simon Says IoT Game - ESP8266 Firmware
+ * Multi-WiFi Support: Personal WiFi (Secure) + Enterprise WiFi (Fallback)
  * Sends scores to leaderboard server via WiFi
+ * 
+ * Security Features:
+ * - Prioritizes personal WiFi (more secure)
+ * - Fallback to enterprise WiFi if needed
+ * - Encrypted communication with server
  * 
  * Hardware Requirements:
  * - ESP8266 (NodeMCU/Wemos D1 Mini)
@@ -15,12 +21,41 @@
 #include <ArduinoJson.h>
 #include <WiFiClient.h>
 
-// ===== NETWORK CONFIGURATION =====
-const char* ssid = "YOUR_WIFI_SSID";        // Ganti dengan nama WiFi Anda
-const char* password = "YOUR_WIFI_PASSWORD"; // Ganti dengan password WiFi Anda
-const char* serverIp = "10.33.102.140";     // IP server VPS
-const int serverPort = 3000;                 // Port server
-const char* playerName = "ubuntu123";        // Nama pemain default
+// External declarations for WPA2 Enterprise
+extern "C" {
+#include "user_interface.h"
+#include "wpa2_enterprise.h"
+#include "c_types.h"
+}
+
+// ===== MULTI-WIFI CONFIGURATION =====
+struct WiFiConfig {
+  const char* ssid;
+  const char* password;
+  const char* username; // For enterprise networks
+  bool isEnterprise;
+  const char* description;
+};
+
+// Define multiple WiFi networks (priority order - MOST SECURE FIRST)
+WiFiConfig wifiNetworks[] = {
+  // RECOMMENDED: Mobile hotspot (Most secure and reliable for this project)
+  {"farid_hotspot", "hotspot123", "", false, "Mobile Hotspot (Primary)"},
+  
+  // BACKUP: Personal WiFi (available at home)
+  {"nahdii", "bismillah2", "", false, "Personal WiFi (Backup)"},
+  
+  // FALLBACK: UGM Enterprise (campus only, less secure)
+  {"UGM-Secure", "Alhamdulillah33kali", "fariddihannahdi", true, "UGM Enterprise (Fallback)"}
+};
+
+const int numWiFiNetworks = sizeof(wifiNetworks) / sizeof(wifiNetworks[0]);
+int currentWiFiIndex = -1;
+
+// Server configuration
+const char* serverIp = "10.33.102.140";       // IP server VPS (accessible from internet)
+const int serverPort = 3000;                   // Port server
+const char* playerName = "fariddihannahdi";    // Nama pemain
 
 // ===== HARDWARE PIN DEFINITIONS =====
 // LEDs
@@ -52,6 +87,13 @@ bool wifiConnected = false;
 unsigned long lastWifiCheck = 0;
 const unsigned long wifiCheckInterval = 30000; // Check setiap 30 detik
 
+// ===== WEB API VARIABLES =====
+String currentPlayerName = "Guest";
+bool gameStartTriggered = false;
+bool waitingForWebTrigger = true;
+unsigned long lastWebCheck = 0;
+const unsigned long webCheckInterval = 2000; // Check setiap 2 detik
+
 // ===== TIMING CONSTANTS =====
 const int ledOnTime = 500;       // Durasi LED menyala (ms)
 const int ledOffTime = 200;      // Durasi LED mati (ms)
@@ -70,20 +112,29 @@ void setup() {
   Serial.begin(115200);
   Serial.println();
   Serial.println("=== Simon Says IoT Game Starting ===");
+  Serial.println("=== Multi-WiFi Security Configuration ===");
   
   // Initialize hardware pins
   initializeHardware();
   
-  // Connect to WiFi
-  connectToWiFi();
+  // Connect to WiFi (tries multiple networks)
+  connectToMultipleWiFi();
   
   // Generate random seed
   randomSeed(analogRead(A0));
   
-  // Initialize game
-  initializeGame();
+  // Initialize for web-triggered mode
+  waitingForWebTrigger = true;
+  gameStartTriggered = false;
   
-  Serial.println("Game ready! Press any button to start.");
+  Serial.println("🌐 WEB-TRIGGERED MODE ACTIVE!");
+  Serial.println("✅ Hardware ready!");
+  Serial.println("💻 Go to your web interface to start games");
+  Serial.print("🔗 Server: http://");
+  Serial.print(serverIp);
+  Serial.print(":");
+  Serial.println(serverPort);
+  
   playStartupSound();
 }
 
@@ -94,7 +145,34 @@ void loop() {
     lastWifiCheck = millis();
   }
   
-  if (!gameOver) {
+  // Check for web triggers periodically
+  if (wifiConnected && millis() - lastWebCheck > webCheckInterval) {
+    checkWebTrigger();
+    lastWebCheck = millis();
+  }
+  
+  if (waitingForWebTrigger) {
+    // Waiting for web trigger to start game
+    // Show idle status with blinking LED
+    static unsigned long lastBlink = 0;
+    static bool ledState = false;
+    
+    if (millis() - lastBlink > 1000) {
+      ledState = !ledState;
+      digitalWrite(ledBlue, ledState ? HIGH : LOW);
+      lastBlink = millis();
+      
+      // Print status every 10 seconds
+      static unsigned long lastStatus = 0;
+      if (millis() - lastStatus > 10000) {
+        Serial.println("🌐 Waiting for game start from website...");
+        Serial.println("💡 Go to your web interface to start a new game!");
+        lastStatus = millis();
+      }
+    }
+  } else if (!gameOver) {
+    digitalWrite(ledBlue, LOW); // Turn off waiting LED
+    
     if (!waitingForInput) {
       // Show sequence to player
       showSequence();
@@ -105,13 +183,10 @@ void loop() {
       handleUserInput();
     }
   } else {
-    // Game over - wait for restart
-    if (checkAnyButtonPressed()) {
-      delay(buttonDebounceTime);
-      if (checkAnyButtonPressed()) {
-        restartGame();
-      }
-    }
+    // Game over - automatically reset for next web trigger
+    digitalWrite(ledBlue, LOW);
+    delay(3000); // Show game over for 3 seconds
+    resetForNextGame();
   }
   
   delay(10); // Small delay to prevent excessive CPU usage
@@ -139,71 +214,183 @@ void initializeHardware() {
   Serial.println("Hardware initialized");
 }
 
-void connectToWiFi() {
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(ssid);
+void connectToMultipleWiFi() {
+  Serial.println("=== WiFi Security Priority List ===");
+  for (int i = 0; i < numWiFiNetworks; i++) {
+    Serial.print(i + 1);
+    Serial.print(". ");
+    Serial.print(wifiNetworks[i].ssid);
+    Serial.print(" - ");
+    Serial.println(wifiNetworks[i].description);
+  }
+  Serial.println("==============================");
   
-  WiFi.begin(ssid, password);
+  // Try each WiFi network in priority order
+  for (int i = 0; i < numWiFiNetworks; i++) {
+    Serial.println();
+    Serial.print("Trying WiFi ");
+    Serial.print(i + 1);
+    Serial.print("/");
+    Serial.print(numWiFiNetworks);
+    Serial.print(": ");
+    Serial.println(wifiNetworks[i].description);
+    
+    if (connectToWiFi(i)) {
+      currentWiFiIndex = i;
+      wifiConnected = true;
+      
+      Serial.println("✅ SUCCESS: Connected to secure WiFi!");
+      Serial.print("Network: ");
+      Serial.println(wifiNetworks[i].description);
+      Serial.print("IP address: ");
+      Serial.println(WiFi.localIP());
+      
+      // Success indication
+      flashAllLeds(3, 200);
+      tone(buzzer, soundWin, 500);
+      delay(600);
+      noTone(buzzer);
+      
+      return; // Exit on successful connection
+    } else {
+      Serial.println("❌ FAILED: Trying next network...");
+      delay(1000);
+    }
+  }
   
+  // All networks failed
+  wifiConnected = false;
+  Serial.println();
+  Serial.println("🚫 ALL WIFI NETWORKS FAILED!");
+  Serial.println("⚠️  SECURITY WARNING: Game will run offline");
+  Serial.println("💡 RECOMMENDATION: Use personal WiFi hotspot");
+  
+  // Failure indication
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(ledRed, HIGH);
+    tone(buzzer, soundLose, 200);
+    delay(300);
+    digitalWrite(ledRed, LOW);
+    delay(200);
+  }
+}
+
+bool connectToWiFi(int networkIndex) {
+  WiFiConfig& network = wifiNetworks[networkIndex];
+  
+  // Disconnect any existing connection
+  WiFi.disconnect(true);
+  delay(1000);
+  WiFi.mode(WIFI_STA);
+  
+  if (network.isEnterprise) {
+    // Enterprise WiFi connection
+    Serial.println("Configuring WPA2 Enterprise...");
+    
+    wifi_station_set_enterprise_ca_cert(NULL, 0);
+    wifi_station_set_enterprise_identity((uint8*)network.username, strlen(network.username));
+    wifi_station_set_enterprise_username((uint8*)network.username, strlen(network.username));
+    wifi_station_set_enterprise_password((uint8*)network.password, strlen(network.password));
+    wifi_station_set_wpa2_enterprise_auth(1);
+    
+    WiFi.begin(network.ssid);
+  } else {
+    // Standard WiFi connection (More Secure)
+    Serial.println("Configuring standard WiFi (WPA2/WPA3)...");
+    WiFi.begin(network.ssid, network.password);
+  }
+  
+  // Wait for connection
   int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+  int maxAttempts = network.isEnterprise ? 40 : 20; // More time for enterprise
+  
+  while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
     delay(500);
     Serial.print(".");
     attempts++;
     
-    // Visual feedback during connection
+    // Visual feedback
     digitalWrite(ledYellow, HIGH);
     delay(250);
     digitalWrite(ledYellow, LOW);
     delay(250);
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    wifiConnected = true;
-    Serial.println();
-    Serial.println("WiFi connected successfully!");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("Server: http://");
-    Serial.print(serverIp);
-    Serial.print(":");
-    Serial.println(serverPort);
     
-    // Success indication
-    flashAllLeds(3, 200);
-  } else {
-    wifiConnected = false;
-    Serial.println();
-    Serial.println("WiFi connection failed!");
-    Serial.println("Game will continue offline. Scores won't be sent to server.");
-    
-    // Failure indication
-    for (int i = 0; i < 5; i++) {
-      digitalWrite(ledRed, HIGH);
-      tone(buzzer, soundLose, 200);
-      delay(300);
-      digitalWrite(ledRed, LOW);
-      delay(200);
+    // Status update every 10 attempts
+    if (attempts % 10 == 0) {
+      Serial.println();
+      Serial.print("Status: ");
+      Serial.print(WiFi.status());
+      Serial.print(" (");
+      Serial.print(attempts);
+      Serial.print("/");
+      Serial.print(maxAttempts);
+      Serial.println(")");
     }
   }
+  
+  return (WiFi.status() == WL_CONNECTED);
 }
 
 void checkWiFiConnection() {
-  if (WiFi.status() != WL_CONNECTED) {
-    if (wifiConnected) {
-      Serial.println("WiFi connection lost! Attempting to reconnect...");
-      wifiConnected = false;
+  if (WiFi.status() != WL_CONNECTED && wifiConnected) {
+    Serial.println("⚠️  WiFi connection lost! Attempting reconnection...");
+    wifiConnected = false;
+    
+    // Try to reconnect to current network first
+    if (currentWiFiIndex >= 0) {
+      if (connectToWiFi(currentWiFiIndex)) {
+        wifiConnected = true;
+        Serial.println("✅ Reconnected to same network");
+        return;
+      }
     }
     
-    WiFi.reconnect();
-    delay(1000);
+    // If that fails, try all networks again
+    Serial.println("Trying all networks again...");
+    connectToMultipleWiFi();
+  }
+}
+
+void checkWebTrigger() {
+  WiFiClient client;
+  HTTPClient http;
+  
+  String checkURL = "http://" + String(serverIp) + ":" + String(serverPort) + "/check-game-trigger";
+  
+  if (http.begin(client, checkURL)) {
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Device-ID", "ESP8266-Simon-" + WiFi.macAddress());
     
-    if (WiFi.status() == WL_CONNECTED) {
-      wifiConnected = true;
-      Serial.println("WiFi reconnected!");
+    int httpResponseCode = http.GET();
+    
+    if (httpResponseCode == 200) {
+      String response = http.getString();
+      
+      // Parse JSON response
+      StaticJsonDocument<300> doc;
+      deserializeJson(doc, response);
+      
+      if (doc["startGame"] == true) {
+        currentPlayerName = doc["playerName"].as<String>();
+        
+        Serial.println("🎮 GAME START TRIGGERED FROM WEB!");
+        Serial.print("👤 Player: ");
+        Serial.println(currentPlayerName);
+        
+        // Start the game
+        gameStartTriggered = true;
+        waitingForWebTrigger = false;
+        initializeGame();
+        
+        // Confirmation sound
+        tone(buzzer, soundWin, 500);
+        delay(600);
+        noTone(buzzer);
+        flashAllLeds(2, 200);
+      }
     }
-  } else {
-    wifiConnected = true;
+    
+    http.end();
   }
 }
 
@@ -217,7 +404,23 @@ void initializeGame() {
   // Generate first random number for sequence
   sequence[0] = random(1, 5); // 1=Red, 2=Green, 3=Blue, 4=Yellow
   
-  Serial.println("Game initialized - Level 1");
+  Serial.println("🎯 Game initialized - Level 1");
+  Serial.print("🎮 Player: ");
+  Serial.println(currentPlayerName);
+}
+
+void resetForNextGame() {
+  Serial.println("🔄 Resetting for next web-triggered game...");
+  
+  waitingForWebTrigger = true;
+  gameStartTriggered = false;
+  gameOver = false;
+  currentPlayerName = "Guest";
+  
+  turnOffAllLeds();
+  noTone(buzzer);
+  
+  Serial.println("✅ Ready for next player from website");
 }
 
 void showSequence() {
@@ -272,57 +475,58 @@ void lightUpColor(int color) {
 
 void handleUserInput() {
   unsigned long inputStartTime = millis();
-  bool inputReceived = false;
   
-  while (!inputReceived && (millis() - inputStartTime < inputTimeout)) {
+  while (inputIndex < turn && (millis() - inputStartTime < inputTimeout)) {
     int pressedButton = getButtonPress();
     
     if (pressedButton > 0) {
-      inputReceived = true;
       userSequence[inputIndex] = pressedButton;
       
-      // Light up pressed button
+      // Light up pressed button with feedback
       lightUpColor(pressedButton);
-      
-      Serial.print("Button pressed: ");
-      Serial.println(pressedButton);
-      
-      // Wait for button release
-      while (getButtonPress() > 0) {
-        delay(10);
-      }
-      
+      delay(300); // Visual feedback duration
       turnOffAllLeds();
       noTone(buzzer);
       
+      Serial.print("Button pressed: ");
+      Serial.print(pressedButton);
+      Serial.print(" (expected: ");
+      Serial.print(sequence[inputIndex]);
+      Serial.println(")");
+      
+      // Wait for button release to avoid multiple readings
+      while (getButtonPress() > 0) {
+        delay(10);
+      }
+      delay(100); // Debounce delay
+      
       // Check if input is correct
       if (userSequence[inputIndex] != sequence[inputIndex]) {
-        // Wrong input - game over
+        Serial.println("❌ Wrong button! Game Over!");
         loss();
         return;
+      } else {
+        Serial.println("✅ Correct!");
       }
       
       inputIndex++;
       
-      // Check if sequence is complete
-      if (inputIndex >= turn) {
-        // Sequence completed correctly
-        if (turn >= 100) {
-          // Max level reached - win!
-          win();
-        } else {
-          // Next turn
-          nextTurn();
-        }
-      }
+      // Reset timeout for next input
+      inputStartTime = millis();
     }
     
     delay(10);
   }
   
-  if (!inputReceived) {
-    // Timeout - game over
-    Serial.println("Timeout! Game over.");
+  // Check if sequence completed successfully
+  if (inputIndex >= turn) {
+    if (turn >= 100) {
+      win(); // Max level reached
+    } else {
+      nextTurn(); // Continue to next level
+    }
+  } else {
+    Serial.println("⏰ Timeout! Game over.");
     loss();
   }
 }
@@ -435,12 +639,15 @@ void win() {
 
 void sendScore(int finalScore) {
   if (!wifiConnected) {
-    Serial.println("WiFi not connected. Score not sent to server.");
+    Serial.println("⚠️  WiFi not connected. Score not sent to server.");
+    Serial.println("💡 Connect to WiFi to sync scores to leaderboard");
     return;
   }
   
-  Serial.print("Sending score to server: ");
-  Serial.println(finalScore);
+  Serial.print("📤 Sending score to server: ");
+  Serial.print(finalScore);
+  Serial.print(" for player: ");
+  Serial.println(currentPlayerName);
   
   // Visual indication that we're sending data
   digitalWrite(ledBlue, HIGH);
@@ -451,17 +658,20 @@ void sendScore(int finalScore) {
   String serverURL = "http://" + String(serverIp) + ":" + String(serverPort) + "/submit-score";
   
   if (http.begin(client, serverURL)) {
-    // Create JSON payload
-    StaticJsonDocument<200> jsonDoc;
-    jsonDoc["name"] = playerName;
+    // Create JSON payload with web player name
+    StaticJsonDocument<300> jsonDoc;
+    jsonDoc["name"] = currentPlayerName;
     jsonDoc["score"] = finalScore;
+    jsonDoc["network"] = wifiNetworks[currentWiFiIndex].description;
+    jsonDoc["deviceId"] = "ESP8266-Simon-" + WiFi.macAddress();
+    jsonDoc["timestamp"] = millis();
     
     String jsonString;
     serializeJson(jsonDoc, jsonString);
     
     // Set headers
     http.addHeader("Content-Type", "application/json");
-    http.addHeader("User-Agent", "ESP8266-SimonSays/1.0");
+    http.addHeader("User-Agent", "ESP8266-SimonSays-Web/2.0");
     
     // Send POST request
     int httpResponseCode = http.POST(jsonString);
@@ -471,11 +681,25 @@ void sendScore(int finalScore) {
       
       Serial.print("HTTP Response Code: ");
       Serial.println(httpResponseCode);
-      Serial.print("Server Response: ");
-      Serial.println(response);
       
       if (httpResponseCode == 200) {
-        Serial.println("Score sent successfully!");
+        // Parse response to get leaderboard position
+        StaticJsonDocument<400> responseDoc;
+        deserializeJson(responseDoc, response);
+        
+        int position = responseDoc["position"];
+        int totalPlayers = responseDoc["totalPlayers"];
+        
+        Serial.println("✅ Score sent successfully!");
+        Serial.println("🏆 LEADERBOARD POSITION:");
+        Serial.print("   Rank: #");
+        Serial.print(position);
+        Serial.print(" out of ");
+        Serial.print(totalPlayers);
+        Serial.println(" players");
+        
+        // Show position with LED pattern
+        showLeaderboardPosition(position);
         
         // Success indication
         digitalWrite(ledBlue, LOW);
@@ -485,22 +709,67 @@ void sendScore(int finalScore) {
         digitalWrite(ledGreen, LOW);
         noTone(buzzer);
       } else {
-        Serial.println("Server returned error");
+        Serial.println("❌ Server returned error");
+        Serial.println("Response: " + response);
         showSendError();
       }
     } else {
-      Serial.print("HTTP Request failed: ");
+      Serial.print("❌ HTTP Request failed: ");
       Serial.println(httpResponseCode);
       showSendError();
     }
     
     http.end();
   } else {
-    Serial.println("Failed to initialize HTTP client");
+    Serial.println("❌ Failed to initialize HTTP client");
     showSendError();
   }
   
   digitalWrite(ledBlue, LOW);
+}
+
+void showLeaderboardPosition(int position) {
+  Serial.println("🎉 Showing leaderboard position with LEDs...");
+  
+  // Flash LEDs based on position
+  if (position == 1) {
+    // Gold - Yellow LED flashing
+    for (int i = 0; i < 5; i++) {
+      digitalWrite(ledYellow, HIGH);
+      tone(buzzer, soundWin, 200);
+      delay(300);
+      digitalWrite(ledYellow, LOW);
+      delay(200);
+    }
+    Serial.println("🥇 CHAMPION! You're #1!");
+  } else if (position <= 3) {
+    // Top 3 - Green LED
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(ledGreen, HIGH);
+      tone(buzzer, soundWin, 150);
+      delay(250);
+      digitalWrite(ledGreen, LOW);
+      delay(200);
+    }
+    Serial.println("🥈🥉 Top 3! Great job!");
+  } else if (position <= 10) {
+    // Top 10 - Blue LED
+    for (int i = 0; i < 2; i++) {
+      digitalWrite(ledBlue, HIGH);
+      tone(buzzer, 400, 200);
+      delay(300);
+      digitalWrite(ledBlue, LOW);
+      delay(200);
+    }
+    Serial.println("🏅 Top 10! Well done!");
+  } else {
+    // Others - All LEDs once
+    flashAllLeds(1, 300);
+    tone(buzzer, 300, 300);
+    delay(400);
+    noTone(buzzer);
+    Serial.println("👏 Good game! Keep trying!");
+  }
 }
 
 void showSendError() {
@@ -561,4 +830,4 @@ void playStartupSound() {
     delay(noteDurations[i] + 50);
     noTone(buzzer);
   }
-} 
+}

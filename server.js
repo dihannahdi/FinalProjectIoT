@@ -6,6 +6,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const LEADERBOARD_FILE = './leaderboard.json';
 
+// Game trigger state
+let gameTrigger = {
+    startGame: false,
+    playerName: '',
+    triggeredAt: null,
+    deviceId: null
+};
+
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
@@ -29,10 +37,73 @@ async function writeLeaderboard(data) {
     await fs.writeFile(LEADERBOARD_FILE, JSON.stringify(data, null, 2));
 }
 
-// API endpoint to submit score
+// API endpoint for ESP8266 to check game trigger
+app.get('/check-game-trigger', (req, res) => {
+    const deviceId = req.headers['device-id'];
+    
+    if (gameTrigger.startGame) {
+        console.log(`🎮 Game trigger sent to device: ${deviceId}`);
+        console.log(`👤 Player: ${gameTrigger.playerName}`);
+        
+        // Send trigger data
+        const triggerData = {
+            startGame: true,
+            playerName: gameTrigger.playerName
+        };
+        
+        // Reset trigger after sending (single use)
+        gameTrigger = {
+            startGame: false,
+            playerName: '',
+            triggeredAt: null,
+            deviceId: null
+        };
+        
+        res.json(triggerData);
+    } else {
+        res.json({ startGame: false });
+    }
+});
+
+// API endpoint for web interface to start game
+app.post('/start-game', (req, res) => {
+    try {
+        const { playerName } = req.body;
+        
+        if (!playerName || typeof playerName !== 'string' || playerName.trim() === '') {
+            return res.status(400).json({ 
+                error: 'Player name is required' 
+            });
+        }
+        
+        // Set game trigger
+        gameTrigger = {
+            startGame: true,
+            playerName: playerName.trim(),
+            triggeredAt: new Date().toISOString(),
+            deviceId: null
+        };
+        
+        console.log(`🌐 Game start triggered from web for: ${playerName.trim()}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Game triggered successfully',
+            playerName: playerName.trim()
+        });
+        
+    } catch (error) {
+        console.error('Error triggering game:', error);
+        res.status(500).json({ 
+            error: 'Internal server error while triggering game' 
+        });
+    }
+});
+
+// Enhanced API endpoint to submit score (with leaderboard position)
 app.post('/submit-score', async (req, res) => {
     try {
-        const { name, score } = req.body;
+        const { name, score, network, deviceId, timestamp } = req.body;
 
         // Validation
         if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -50,11 +121,13 @@ app.post('/submit-score', async (req, res) => {
         // Read current leaderboard
         let leaderboard = await readLeaderboard();
 
-        // Add new score
+        // Add new score with enhanced data
         const newEntry = {
             name: name.trim(),
             score: score,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            network: network || 'Unknown',
+            deviceId: deviceId || 'Unknown'
         };
         
         leaderboard.push(newEntry);
@@ -62,21 +135,29 @@ app.post('/submit-score', async (req, res) => {
         // Sort by score (highest first)
         leaderboard.sort((a, b) => b.score - a.score);
 
-        // Keep only top 50 entries to prevent file from growing too large
-        leaderboard = leaderboard.slice(0, 50);
+        // Find position of this entry
+        const position = leaderboard.findIndex(entry => 
+            entry.name === newEntry.name && 
+            entry.score === newEntry.score && 
+            entry.timestamp === newEntry.timestamp
+        ) + 1;
+
+        // Keep only top 100 entries
+        leaderboard = leaderboard.slice(0, 100);
 
         // Write back to file
         await writeLeaderboard(leaderboard);
 
-        console.log(`New score submitted: ${name} - ${score}`);
+        console.log(`📊 Score submitted: ${name} - Score: ${score} - Position: #${position}`);
         
+        // Enhanced response with leaderboard position
         res.status(200).json({ 
+            success: true,
             message: 'Score submitted successfully',
-            rank: leaderboard.findIndex(entry => 
-                entry.name === newEntry.name && 
-                entry.score === newEntry.score && 
-                entry.timestamp === newEntry.timestamp
-            ) + 1
+            position: position,
+            totalPlayers: leaderboard.length,
+            playerName: name.trim(),
+            score: score
         });
 
     } catch (error) {
@@ -98,6 +179,15 @@ app.get('/api/leaderboard', async (req, res) => {
             error: 'Internal server error while fetching leaderboard' 
         });
     }
+});
+
+// API endpoint to get game status
+app.get('/api/game-status', (req, res) => {
+    res.json({
+        isGameActive: gameTrigger.startGame,
+        currentPlayer: gameTrigger.playerName,
+        triggeredAt: gameTrigger.triggeredAt
+    });
 });
 
 // Serve the main page
