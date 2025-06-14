@@ -6,13 +6,47 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const LEADERBOARD_FILE = './leaderboard.json';
 
-// Game trigger state
+// ===== ENHANCED GAME TRIGGER MANAGEMENT =====
 let gameTrigger = {
     startGame: false,
     playerName: '',
     triggeredAt: null,
     deviceId: null
 };
+
+// ===== AUTO-RESET MECHANISM FOR FAST FLOW =====
+setInterval(() => {
+    if (gameTrigger.startGame && gameTrigger.triggeredAt) {
+        const triggerAge = Date.now() - new Date(gameTrigger.triggeredAt).getTime();
+        // Auto-reset after 45 seconds to prevent stuck triggers
+        if (triggerAge > 45000) {
+            console.log(`🔄 Auto-resetting stale game trigger (${Math.floor(triggerAge/1000)}s old)`);
+            gameTrigger = {
+                startGame: false,
+                playerName: '',
+                triggeredAt: null,
+                deviceId: null
+            };
+        }
+    }
+}, 10000); // Check every 10 seconds
+
+// ===== PERFORMANCE MONITORING =====
+let requestCount = 0;
+let lastReset = Date.now();
+
+app.use((req, res, next) => {
+    requestCount++;
+    
+    // Reset counter every hour
+    if (Date.now() - lastReset > 3600000) {
+        console.log(`📊 Performance: ${requestCount} requests in last hour`);
+        requestCount = 0;
+        lastReset = Date.now();
+    }
+    
+    next();
+});
 
 // Middleware
 app.use(express.json());

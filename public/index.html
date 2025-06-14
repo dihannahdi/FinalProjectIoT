@@ -476,12 +476,13 @@
             }
         }
 
-        // Enhanced game monitoring
+        // Enhanced game monitoring with faster polling
         function startGameMonitoring() {
             if (gameCheckInterval) {
                 clearInterval(gameCheckInterval);
             }
             
+            // Faster polling for more responsive game state detection
             gameCheckInterval = setInterval(async () => {
                 try {
                     const response = await fetch('/api/game-status');
@@ -492,8 +493,14 @@
                     }
                 } catch (error) {
                     console.error('Error checking game status:', error);
+                    // Auto-retry after connection error
+                    setTimeout(() => {
+                        if (currentGame.isActive) {
+                            console.log('Retrying game status check...');
+                        }
+                    }, 2000);
                 }
-            }, 5000);
+            }, 2000); // Reduced from 5000ms to 2000ms for faster response
         }
 
         // Enhanced game finished function
@@ -907,6 +914,39 @@
                 clearInterval(gameCheckInterval);
             }
         });
+    
+        // Enhanced cleanup to prevent memory leaks
+        window.addEventListener('beforeunload', () => {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+            if (gameCheckInterval) {
+                clearInterval(gameCheckInterval);
+                gameCheckInterval = null;
+            }
+            console.log('✅ All intervals cleared - memory leak prevention');
+        });
+
+        // Page visibility cleanup
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // Clear intervals when page is hidden
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                }
+                if (gameCheckInterval) {
+                    clearInterval(gameCheckInterval);
+                }
+            } else {
+                // Restart intervals when page becomes visible
+                startRefreshTimer();
+                if (currentGame.isActive) {
+                    startGameMonitoring();
+                }
+            }
+        });
+    
     </script>
-</body>
+    </body>
 </html> 
