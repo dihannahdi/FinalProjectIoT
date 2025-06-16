@@ -9,7 +9,11 @@
     "build": "npm prune --production",
     "prestart": "node scripts/setup.js",
     "health": "curl -f http://localhost:${PORT:-3000}/health || exit 1",
-    "test": "echo \"Tests will be implemented\" && exit 0"
+    "test": "echo \"Tests will be implemented\" && exit 0",
+    "test:deployment": "node scripts/test-deployment.js",
+    "test:local": "node scripts/test-deployment.js --local",
+    "test:azure": "node scripts/test-deployment.js --azure",
+    "production": "NODE_ENV=production node index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
