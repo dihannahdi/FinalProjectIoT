@@ -1,0 +1,697 @@
+BAB 2
+DESAIN PERANGKAT LUNAK (SOFTWARE)
+
+2.1 Algoritma Utama Game Simon Says
+
+2.1.1 Konsep Algoritma Simon Says
+Algoritma Simon Says mengimplementasikan pola permainan memori berurutan dimana pemain harus mengulang urutan warna yang ditampilkan oleh sistem. Algoritma ini terdiri dari beberapa komponen utama:
+
+a) Sequence Generation Algorithm:
+   - Menggunakan fungsi random() untuk menghasilkan angka 1-4
+   - Setiap angka merepresentasikan warna: 1=Red, 2=Green, 3=Blue, 4=Yellow
+   - Sequence dimulai dengan 1 elemen dan bertambah setiap level berhasil
+   - Maximum sequence length: 100 elemen (dibatasi array size)
+
+b) Pattern Display Algorithm:
+   - Loop through sequence array dari index 0 hingga current turn
+   - Aktifkan LED sesuai sequence[i] selama LED_ON_TIME (500ms)
+   - Matikan LED selama LED_OFF_TIME (200ms)
+   - Berikan audio feedback dengan frekuensi unik per warna
+
+c) Input Validation Algorithm:
+   - Capture user input dalam userSequence array
+   - Compare userSequence[inputIndex] dengan sequence[inputIndex]
+   - Jika match: increment inputIndex, lanjut ke input berikutnya
+   - Jika tidak match: game over, kalkulasi score dan kirim ke server
+   - Timeout mechanism: 5000ms per input untuk mencegah hang
+
+d) Scoring Algorithm:
+   - Base score: (level - 1) * 10 points per level completed
+   - Perfect game bonus: +50% jika tidak ada kesalahan
+   - Time bonus: pengurangan score berdasarkan total game time
+   - Final score = (level * 10) + time_bonus + perfect_bonus
+
+2.1.2 Pseudocode Algoritma Utama
+ALGORITHM SimonSaysGameLoop
+INPUT: none
+OUTPUT: score, level, gameTime
+
+INITIALIZE:
+  sequence[100] = empty array
+  userSequence[100] = empty array  
+  turn = 1
+  level = 1
+  gameOver = false
+  startTime = currentTime()
+
+WHILE NOT gameOver DO:
+  // Generate new sequence element
+  sequence[turn-1] = random(1, 4)
+  
+  // Display sequence to player
+  FOR i = 0 TO turn-1 DO:
+    displayLED(sequence[i])
+    playSound(sequence[i])
+    delay(LED_ON_TIME)
+    turnOffLED(sequence[i])
+    delay(LED_OFF_TIME)
+  END FOR
+  
+  // Get user input
+  inputIndex = 0
+  inputTimeout = currentTime() + INPUT_TIMEOUT
+  
+  WHILE inputIndex < turn AND currentTime() < inputTimeout DO:
+    userInput = readButtonInput()
+    
+    IF userInput != 0 THEN:
+      userSequence[inputIndex] = userInput
+      
+      IF userSequence[inputIndex] == sequence[inputIndex] THEN:
+        inputIndex++
+        playCorrectSound()
+      ELSE:
+        gameOver = true
+        playWrongSound()
+        BREAK
+      END IF
+    END IF
+  END WHILE
+  
+  // Check if timeout occurred
+  IF currentTime() >= inputTimeout THEN:
+    gameOver = true
+  END IF
+  
+  // Check if sequence completed successfully
+  IF inputIndex == turn AND NOT gameOver THEN:
+    turn++
+    level++
+    playLevelCompleteSound()
+  END IF
+END WHILE
+
+// Calculate final score
+gameTime = currentTime() - startTime
+score = calculateScore(level, gameTime, perfectGame)
+
+RETURN score, level, gameTime
+
+2.2 Bahasa Pemrograman dan Platform
+
+2.2.1 Backend Server - Node.js dengan Express.js
+
+a) Pemilihan Node.js:
+Node.js dipilih karena:
+- Event-driven, non-blocking I/O model cocok untuk aplikasi real-time
+- JavaScript runtime yang memungkinkan full-stack development
+- NPM ecosystem yang luas untuk dependency management
+- Excellent performance untuk I/O intensive applications
+- Native JSON support untuk data processing
+
+b) Express.js Framework:
+Express.js menyediakan:
+- Minimal dan flexible web application framework
+- Robust routing system untuk RESTful API
+- Middleware support untuk request processing
+- Static file serving capability
+- Error handling dan debugging tools
+
+c) Core Dependencies:
+{
+  "express": "4.18.2",     // Web application framework
+  "nodemon": "3.0.1"       // Development auto-restart tool
+}
+
+d) Server Configuration:
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware configuration
+app.use(express.json());              // JSON body parser
+app.use(express.static('public'));    // Static file serving
+app.use(corsMiddleware);               // CORS support
+app.use(securityHeaders);             // Security headers
+
+// Server startup
+app.listen(PORT, '0.0.0.0', callback);
+
+2.2.2 Frontend - HTML5, CSS3, dan Vanilla JavaScript
+
+a) HTML5 Features:
+- Semantic markup untuk accessibility
+- Form validation attributes
+- Local storage API untuk caching
+- Canvas API untuk animations (optional)
+- WebSocket support untuk real-time updates (future enhancement)
+
+b) CSS3 Advanced Features:
+- Flexbox dan Grid layout untuk responsive design
+- CSS animations dan transitions untuk user experience
+- CSS custom properties (variables) untuk theming
+- Media queries untuk device adaptability
+- CSS transforms untuk visual effects
+
+c) Vanilla JavaScript Implementation:
+- ES6+ syntax untuk modern JavaScript features
+- Fetch API untuk HTTP requests
+- Promise-based asynchronous programming
+- DOM manipulation untuk dynamic content
+- Event-driven programming model
+
+d) Frontend Architecture Pattern:
+// Module pattern untuk code organization
+const GameController = {
+  init: function() {
+    this.bindEvents();
+    this.loadLeaderboard();
+  },
+  
+  bindEvents: function() {
+    document.getElementById('startBtn')
+      .addEventListener('click', this.startGame.bind(this));
+  },
+  
+  startGame: async function() {
+    const response = await fetch('/start-game', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({playerName: this.getPlayerName()})
+    });
+    // Handle response
+  }
+};
+
+2.2.3 Firmware ESP8266 - Arduino C++
+
+a) Arduino IDE dan C++:
+Arduino C++ dipilih untuk firmware karena:
+- Native support untuk ESP8266 platform
+- Rich library ecosystem untuk IoT functionality
+- Real-time performance untuk hardware control
+- Direct memory management untuk optimized performance
+- Community support dan documentation
+
+b) Core Libraries:
+#include <ESP8266WiFi.h>        // WiFi connectivity
+#include <ESP8266HTTPClient.h>  // HTTP client functionality
+#include <ArduinoJson.h>        // JSON parsing dan serialization
+#include <WiFiClient.h>         // Network client
+
+c) Memory Management:
+- Stack allocation untuk local variables
+- PROGMEM untuk storing constants in flash memory
+- Dynamic memory allocation minimization
+- String object optimization untuk memory efficiency
+
+d) Interrupt-driven Programming:
+// Button interrupt handlers
+void ICACHE_RAM_ATTR redButtonISR() {
+  if (millis() - lastDebounceTime > DEBOUNCE_TIME) {
+    buttonPressed = 1;
+    lastDebounceTime = millis();
+  }
+}
+
+// Timer interrupt untuk LED control
+void ICACHE_RAM_ATTR timerISR() {
+  ledState = !ledState;
+  digitalWrite(currentLED, ledState);
+}
+
+2.3 Backend Server Architecture
+
+2.3.1 MVC-inspired Architecture
+Meskipun tidak menggunakan framework MVC formal, server mengimplementasikan separation of concerns:
+
+a) Model Layer (Data Management):
+// Leaderboard data model
+async function readLeaderboard() {
+  try {
+    const data = await fs.readFile(LEADERBOARD_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    return [];
+  }
+}
+
+async function writeLeaderboard(data) {
+  await fs.writeFile(LEADERBOARD_FILE, JSON.stringify(data, null, 2));
+}
+
+b) Controller Layer (Business Logic):
+// Game trigger controller
+app.post('/start-game', (req, res) => {
+  const { playerName } = req.body;
+  
+  // Validation
+  if (!playerName || typeof playerName !== 'string') {
+    return res.status(400).json({error: 'Player name required'});
+  }
+  
+  // Set game trigger
+  gameTrigger = {
+    startGame: true,
+    playerName: playerName.trim(),
+    triggeredAt: new Date().toISOString(),
+    deviceId: null
+  };
+  
+  res.json({success: true, playerName: playerName.trim()});
+});
+
+c) View Layer (Response Formatting):
+// Response formatter untuk consistent API responses
+function formatResponse(success, data, error = null) {
+  return {
+    success: success,
+    timestamp: new Date().toISOString(),
+    data: data,
+    error: error
+  };
+}
+
+2.3.2 Middleware Pipeline
+Server mengimplementasikan middleware pipeline untuk request processing:
+
+a) Security Middleware:
+// CORS configuration
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, device-id');
+  res.header('X-Content-Type-Options', 'nosniff');
+  res.header('X-Frame-Options', 'DENY');
+  res.header('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
+b) Performance Monitoring Middleware:
+let requestCount = 0;
+app.use((req, res, next) => {
+  requestCount++;
+  console.log(`Request ${requestCount}: ${req.method} ${req.path}`);
+  next();
+});
+
+c) Error Handling Middleware:
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({error: 'Internal server error'});
+});
+
+2.3.3 Real-time Game Management
+Server mengimplementasikan real-time game management system:
+
+a) Game Trigger Mechanism:
+let gameTrigger = {
+  startGame: false,
+  playerName: '',
+  triggeredAt: null,
+  deviceId: null
+};
+
+// Auto-reset mechanism
+setInterval(() => {
+  if (gameTrigger.startGame && gameTrigger.triggeredAt) {
+    const triggerAge = Date.now() - new Date(gameTrigger.triggeredAt).getTime();
+    if (triggerAge > 45000) { // 45 second timeout
+      gameTrigger = {startGame: false, playerName: '', triggeredAt: null, deviceId: null};
+    }
+  }
+}, 10000);
+
+b) Polling-based Communication:
+ESP8266 melakukan polling setiap 2 detik untuk mengecek game trigger, memungkinkan near real-time response tanpa requiring persistent connections.
+
+2.4 Frontend Web Interface
+
+2.4.1 Single Page Application (SPA) Architecture
+Frontend didesain sebagai SPA dengan dynamic content loading:
+
+a) Application Structure:
+public/
+├── index.html          // Main application shell
+├── style.css           // Comprehensive styling
+└── (embedded JS)       // Inline JavaScript dalam HTML
+
+b) Component-based Design:
+- Header component dengan game branding
+- Game control panel untuk user interaction
+- Hardware status panel untuk monitoring
+- Leaderboard component dengan real-time updates
+- Recent games panel untuk game history
+
+c) State Management:
+// Global application state
+const AppState = {
+  gameStatus: 'idle',
+  playerName: '',
+  isConnected: false,
+  leaderboard: [],
+  
+  updateGameStatus: function(status) {
+    this.gameStatus = status;
+    this.renderStatusIndicators();
+  }
+};
+
+2.4.2 Responsive Design Implementation
+Frontend menggunakan mobile-first responsive design:
+
+a) CSS Grid dan Flexbox:
+.main-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  padding: 2rem;
+}
+
+.leaderboard-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+b) Media Queries:
+@media (max-width: 768px) {
+  .header-stats {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .game-controls {
+    padding: 1rem;
+  }
+}
+
+c) Progressive Enhancement:
+- Base functionality tanpa JavaScript
+- Enhanced features dengan JavaScript enabled
+- Graceful degradation untuk older browsers
+
+2.4.3 Real-time Updates
+Frontend mengimplementasikan real-time updates tanpa WebSocket:
+
+a) Polling-based Updates:
+// Auto-refresh leaderboard setiap 10 detik
+setInterval(async () => {
+  try {
+    const response = await fetch('/api/leaderboard');
+    const leaderboard = await response.json();
+    updateLeaderboardDisplay(leaderboard);
+  } catch (error) {
+    console.error('Failed to update leaderboard:', error);
+  }
+}, 10000);
+
+b) Status Monitoring:
+// Monitor connection status
+async function checkConnectionStatus() {
+  try {
+    const response = await fetch('/health');
+    if (response.ok) {
+      updateConnectionStatus('connected');
+    }
+  } catch (error) {
+    updateConnectionStatus('disconnected');
+  }
+}
+
+2.5 Firmware ESP8266
+
+2.5.1 Multi-tasking Architecture
+ESP8266 firmware mengimplementasikan cooperative multitasking:
+
+a) Main Loop Structure:
+void loop() {
+  // WiFi connection monitoring
+  if (millis() - lastWifiCheck > wifiCheckInterval) {
+    checkWiFiConnection();
+    lastWifiCheck = millis();
+  }
+  
+  // Web trigger polling
+  if (wifiConnected && millis() - lastWebCheck > webCheckInterval) {
+    checkWebTrigger();
+    lastWebCheck = millis();
+  }
+  
+  // Game logic processing
+  if (!waitingForWebTrigger && !gameOver) {
+    processGameLogic();
+  }
+  
+  delay(10); // Prevent watchdog timeout
+}
+
+b) State Machine Implementation:
+enum GameState {
+  WAITING_FOR_TRIGGER,
+  SHOWING_SEQUENCE,
+  WAITING_FOR_INPUT,
+  PROCESSING_INPUT,
+  GAME_OVER
+};
+
+GameState currentState = WAITING_FOR_TRIGGER;
+
+void processGameLogic() {
+  switch(currentState) {
+    case WAITING_FOR_TRIGGER:
+      handleWaitingState();
+      break;
+    case SHOWING_SEQUENCE:
+      handleSequenceDisplay();
+      break;
+    // ... other states
+  }
+}
+
+2.5.2 Network Communication
+Firmware mengimplementasikan robust network communication:
+
+a) Multi-WiFi Support:
+struct WiFiConfig {
+  const char* ssid;
+  const char* password;
+  const char* username;    // For enterprise networks
+  bool isEnterprise;
+  const char* description;
+};
+
+WiFiConfig wifiNetworks[] = {
+  {"UGM-Secure", "password", "username@ugm.ac.id", true, "UGM Enterprise"},
+  {"Bapakmu Ijo 5G", "tengputeh", "", false, "Personal WiFi"}
+};
+
+b) HTTP Client Implementation:
+void submitScore(int score, int level, unsigned long gameTime) {
+  HTTPClient http;
+  WiFiClient client;
+  
+  String url = "http://" + String(serverIp) + ":" + String(serverPort) + "/submit-score";
+  
+  if (http.begin(client, url)) {
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Device-ID", "ESP8266-Simon-" + WiFi.macAddress());
+    
+    String payload = createScorePayload(score, level, gameTime);
+    int httpResponseCode = http.POST(payload);
+    
+    if (httpResponseCode > 0) {
+      String response = http.getString();
+      processServerResponse(response);
+    }
+    
+    http.end();
+  }
+}
+
+c) JSON Processing:
+String createScorePayload(int score, int level, unsigned long gameTime) {
+  DynamicJsonDocument doc(1024);
+  
+  doc["name"] = playerName;
+  doc["score"] = score;
+  doc["level"] = level;
+  doc["gameTime"] = gameTime;
+  doc["perfectGame"] = (errorCount == 0);
+  doc["network"] = WiFi.SSID();
+  doc["deviceId"] = WiFi.macAddress();
+  
+  String payload;
+  serializeJson(doc, payload);
+  return payload;
+}
+
+2.5.3 Hardware Abstraction Layer
+Firmware mengimplementasikan hardware abstraction untuk maintainability:
+
+a) LED Control Abstraction:
+class LEDController {
+private:
+  int pins[4] = {ledRed, ledGreen, ledBlue, ledYellow};
+  int frequencies[4] = {220, 277, 330, 415};
+  
+public:
+  void displayColor(int color, int duration) {
+    digitalWrite(pins[color-1], HIGH);
+    tone(buzzer, frequencies[color-1], duration);
+    delay(duration);
+    digitalWrite(pins[color-1], LOW);
+    noTone(buzzer);
+  }
+  
+  void turnOffAll() {
+    for(int i = 0; i < 4; i++) {
+      digitalWrite(pins[i], LOW);
+    }
+  }
+};
+
+b) Button Input Handling:
+class ButtonController {
+private:
+  int pins[4] = {btnRed, btnGreen, btnBlue, btnYellow};
+  unsigned long lastDebounceTime = 0;
+  const unsigned long debounceDelay = 50;
+  
+public:
+  int readButton() {
+    for(int i = 0; i < 4; i++) {
+      if(digitalRead(pins[i]) == LOW) {
+        if(millis() - lastDebounceTime > debounceDelay) {
+          lastDebounceTime = millis();
+          return i + 1;
+        }
+      }
+    }
+    return 0;
+  }
+};
+
+2.6 API Design dan Communication Protocol
+
+2.6.1 RESTful API Design
+Server mengimplementasikan RESTful API principles:
+
+a) Resource-based URLs:
+GET  /api/leaderboard        // Get leaderboard data
+POST /submit-score           // Submit game score
+POST /start-game             // Trigger game start
+GET  /check-game-trigger     // Check for game trigger
+GET  /api/game-status        // Get current game status
+GET  /health                 // Health check endpoint
+
+b) HTTP Status Codes:
+- 200 OK: Successful requests
+- 400 Bad Request: Invalid input data
+- 404 Not Found: Endpoint tidak ditemukan
+- 500 Internal Server Error: Server errors
+
+c) Consistent Response Format:
+{
+  "success": true,
+  "message": "Score submitted successfully",
+  "data": {
+    "position": 5,
+    "score": 120
+  },
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+
+2.6.2 Error Handling Strategy
+Sistem mengimplementasikan comprehensive error handling:
+
+a) Server-side Error Handling:
+app.post('/submit-score', async (req, res) => {
+  try {
+    // Validation
+    if (!req.body.name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Name is required'
+      });
+    }
+    
+    // Process score
+    const result = await processScore(req.body);
+    res.json({success: true, data: result});
+    
+  } catch (error) {
+    console.error('Error processing score:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+b) Client-side Error Handling:
+async function submitScore(scoreData) {
+  try {
+    const response = await fetch('/submit-score', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(scoreData)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    return result;
+    
+  } catch (error) {
+    console.error('Failed to submit score:', error);
+    showErrorMessage('Failed to submit score. Please try again.');
+    return null;
+  }
+}
+
+c) ESP8266 Error Recovery:
+void handleNetworkError() {
+  Serial.println("Network error detected, attempting recovery...");
+  
+  // Reset WiFi connection
+  WiFi.disconnect();
+  delay(1000);
+  
+  // Attempt reconnection
+  connectToMultipleWiFi();
+  
+  // Visual error indication
+  for(int i = 0; i < 3; i++) {
+    digitalWrite(ledRed, HIGH);
+    delay(200);
+    digitalWrite(ledRed, LOW);
+    delay(200);
+  }
+}
+
+2.6.3 Performance Optimization
+Sistem mengimplementasikan berbagai optimizations:
+
+a) Backend Optimizations:
+- JSON data caching untuk leaderboard
+- Request rate limiting untuk DDoS protection
+- Response compression untuk bandwidth efficiency
+- Connection pooling untuk database operations
+
+b) Frontend Optimizations:
+- Asset minification dan compression
+- Image optimization dan lazy loading
+- CSS dan JavaScript bundling
+- Browser caching dengan proper cache headers
+
+c) Firmware Optimizations:
+- Memory pool untuk dynamic allocations
+- String concatenation optimization
+- Interrupt-driven input handling
+- Power management untuk battery operation
+
+Desain perangkat lunak Simon Says IoT mengimplementasikan best practices dalam software engineering, dengan fokus pada maintainability, scalability, dan performance. Sistem ini dirancang untuk dapat diadaptasi dan dikembangkan lebih lanjut sesuai kebutuhan aplikasi IoT yang lebih kompleks. 

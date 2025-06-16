@@ -1,1 +1,12 @@
-[] 
+[
+  {
+    "name": "TestPlayer",
+    "score": 15,
+    "level": 1,
+    "gameTime": 0,
+    "perfectGame": false,
+    "timestamp": "2025-06-16T09:52:31.875Z",
+    "network": "Test Network",
+    "deviceId": "ESP8266-Test-Device"
+  }
+]

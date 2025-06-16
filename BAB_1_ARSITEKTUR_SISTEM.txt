@@ -1,0 +1,228 @@
+BAB 1
+ARSITEKTUR SISTEM
+
+1.1 Arsitektur Keseluruhan Sistem IoT
+
+Sistem Simon Says IoT merupakan implementasi Internet of Things (IoT) yang mengintegrasikan perangkat keras (hardware) dan perangkat lunak (software) untuk menciptakan pengalaman permainan interaktif dengan fitur leaderboard real-time. Sistem ini dirancang dengan arsitektur terdistribusi yang terdiri dari tiga layer utama:
+
+a) Device Layer (Layer Perangkat)
+   - ESP8266 sebagai mikrokontroler utama
+   - Sensor input berupa 4 push button (merah, hijau, biru, kuning)
+   - Aktuator output berupa 4 LED dan 1 buzzer
+   - Modul WiFi terintegrasi untuk konektivitas internet
+
+b) Network Layer (Layer Jaringan)
+   - Koneksi WiFi multi-network dengan prioritas keamanan
+   - Protokol HTTP untuk komunikasi data
+   - RESTful API untuk pertukaran informasi
+   - Auto-reconnection mechanism untuk reliability
+
+c) Application Layer (Layer Aplikasi)
+   - Backend server Node.js dengan Express.js framework
+   - Frontend web interface responsif
+   - Database JSON untuk penyimpanan skor
+   - Cloud deployment pada Azure App Service
+
+1.2 Komponen Hardware
+
+1.2.1 Mikrokontroler ESP8266
+ESP8266 dipilih sebagai platform utama karena memiliki spesifikasi yang memadai untuk aplikasi IoT:
+- CPU: Tensilica L106 32-bit RISC processor, clock speed hingga 160 MHz
+- Memory: 32 KB instruction RAM, 80 KB user-data RAM
+- Flash Memory: 4 MB (untuk program dan data)
+- WiFi: 802.11 b/g/n dengan WPA/WPA2/WPA2-Enterprise security
+- GPIO: 17 pin digital I/O untuk interfacing dengan komponen eksternal
+- ADC: 1 channel 10-bit untuk pembacaan sensor analog
+- Power Supply: 3.3V dengan konsumsi daya rendah
+
+1.2.2 Sistem Input/Output
+a) Input System (4 Push Buttons):
+   - Button Red: GPIO D5 dengan konfigurasi INPUT_PULLUP
+   - Button Green: GPIO D6 dengan konfigurasi INPUT_PULLUP  
+   - Button Blue: GPIO D7 dengan konfigurasi INPUT_PULLUP
+   - Button Yellow: GPIO D8 dengan konfigurasi INPUT_PULLUP
+   - Debouncing time: 50ms untuk mencegah multiple triggers
+
+b) Output System:
+   - LED Red: GPIO D1 untuk indikasi warna merah
+   - LED Green: GPIO D2 untuk indikasi warna hijau
+   - LED Blue: GPIO D3 untuk indikasi warna biru
+   - LED Yellow: GPIO D4 untuk indikasi warna kuning
+   - Buzzer: GPIO D0 untuk feedback audio dengan frekuensi berbeda per warna
+
+c) Timing Configuration:
+   - LED ON Duration: 500ms per sequence
+   - LED OFF Duration: 200ms antar sequence
+   - Input Timeout: 5000ms untuk respons pemain
+   - Audio Frequencies: Red(220Hz), Green(277Hz), Blue(330Hz), Yellow(415Hz)
+
+1.3 Komponen Software
+
+1.3.1 Backend Server Architecture
+Backend server dibangun menggunakan Node.js dengan Express.js framework, menyediakan:
+
+a) Core Services:
+   - HTTP Server pada port 3000 dengan binding 0.0.0.0
+   - Static file serving untuk frontend assets
+   - JSON-based data persistence
+   - CORS (Cross-Origin Resource Sharing) support
+   - Security headers implementation
+
+b) Game Management System:
+   - Game trigger mechanism dengan auto-reset functionality
+   - Player session management dengan timeout handling
+   - Score validation dan analytics processing
+   - Leaderboard ranking dengan real-time updates
+
+c) Monitoring dan Health Check:
+   - Performance monitoring dengan request counting
+   - Health check endpoint (/health) untuk server status
+   - Error handling middleware untuk graceful failure
+   - Logging system untuk debugging dan maintenance
+
+1.3.2 Frontend Web Interface
+Frontend diimplementasikan sebagai Single Page Application (SPA) dengan:
+
+a) User Interface Components:
+   - Game control panel untuk memulai permainan
+   - Hardware status monitoring dashboard
+   - Real-time leaderboard dengan auto-refresh
+   - Responsive design untuk berbagai device
+
+b) Interactive Features:
+   - Player name input dengan validation
+   - Game start trigger button
+   - Real-time status indicators
+   - Animated background dan visual effects
+
+c) Technology Stack:
+   - HTML5 dengan semantic markup
+   - CSS3 dengan Flexbox dan Grid layout
+   - Vanilla JavaScript untuk interaktivity
+   - Font Awesome icons untuk visual enhancement
+   - Google Fonts untuk typography
+
+1.3.3 Firmware ESP8266
+Firmware Arduino yang mengimplementasikan:
+
+a) WiFi Management:
+   - Multi-network configuration dengan prioritas
+   - WPA2-Enterprise support untuk jaringan kampus
+   - Automatic reconnection dengan failover mechanism
+   - Connection status monitoring dan recovery
+
+b) Game Logic Implementation:
+   - Simon Says algorithm dengan sequence generation
+   - User input validation dan scoring
+   - Real-time communication dengan server
+   - Audio-visual feedback system
+
+1.4 Komunikasi Antar Komponen
+
+1.4.1 Protocol Stack
+Sistem menggunakan protocol stack sebagai berikut:
+- Physical Layer: IEEE 802.11 (WiFi)
+- Network Layer: Internet Protocol (IP)
+- Transport Layer: Transmission Control Protocol (TCP)
+- Application Layer: Hypertext Transfer Protocol (HTTP)
+
+1.4.2 API Communication Flow
+a) Game Trigger Flow:
+   1. Web interface POST /start-game dengan player name
+   2. Server sets game trigger dengan timestamp
+   3. ESP8266 polling GET /check-game-trigger setiap 2 detik
+   4. Server response dengan game trigger data
+   5. ESP8266 executes game sequence
+
+b) Score Submission Flow:
+   1. ESP8266 collects game data (score, level, time, etc.)
+   2. Device POST /submit-score dengan analytics data
+   3. Server validates data dan updates leaderboard
+   4. Server response dengan position dan analytics
+   5. Frontend auto-refresh leaderboard data
+
+1.4.3 Data Format dan Validation
+a) Game Trigger Request:
+```json
+{
+  "playerName": "string (required, max 20 chars)"
+}
+```
+
+b) Score Submission Request:
+```json
+{
+  "name": "string (required)",
+  "score": "number (required, >= 0)",
+  "level": "number (optional)",
+  "gameTime": "number (optional, in ms)",
+  "perfectGame": "boolean (optional)",
+  "network": "string (optional)",
+  "deviceId": "string (optional)",
+  "timestamp": "ISO string (auto-generated)"
+}
+```
+
+c) Server Response Format:
+```json
+{
+  "success": "boolean",
+  "message": "string",
+  "position": "number",
+  "analytics": {
+    "personalBest": "number",
+    "averageScore": "number",
+    "gamesPlayed": "number",
+    "improvement": "string"
+  }
+}
+```
+
+1.5 Deployment Architecture
+
+1.5.1 Local Development Environment
+- Node.js runtime environment v18.x LTS
+- Local file system untuk JSON database
+- Development tools: nodemon untuk auto-restart
+- Testing environment dengan basic test suite
+
+1.5.2 Production Cloud Deployment
+a) Azure App Service Configuration:
+   - Runtime: Node.js 18 LTS on Linux
+   - Pricing Tier: F1 (Free) untuk testing, scalable ke production tiers
+   - Regional deployment: East US (configurable)
+   - Auto-scaling capability untuk traffic management
+
+b) Deployment Pipeline:
+   - Git-based deployment dengan automatic builds
+   - Environment variable configuration untuk production settings
+   - Health monitoring dengan Application Insights
+   - Continuous deployment dari GitHub repository
+
+1.5.3 Network Infrastructure
+a) Security Configuration:
+   - HTTPS enforcement untuk secure communication
+   - Security headers implementation (CORS, XSS Protection, etc.)
+   - Content Security Policy untuk frontend protection
+   - Input validation dan sanitization pada semua endpoints
+
+b) Performance Optimization:
+   - Static file caching untuk frontend assets
+   - JSON data compression untuk API responses
+   - Connection pooling untuk database operations
+   - Request rate limiting untuk DDoS protection
+
+1.5.4 Monitoring dan Maintenance
+a) Application Monitoring:
+   - Health check endpoints untuk status monitoring
+   - Performance metrics collection (request count, response time)
+   - Error tracking dan logging system
+   - Automatic restart pada failure conditions
+
+b) Data Management:
+   - JSON file backup system untuk data protection
+   - Leaderboard size limiting (top 100 entries)
+   - Data validation dan integrity checks
+   - Manual reset capabilities untuk maintenance
+
+Arsitektur sistem Simon Says IoT ini dirancang dengan prinsip modular, scalable, dan maintainable, memungkinkan pengembangan lebih lanjut dan adaptasi untuk berbagai use case IoT applications. 

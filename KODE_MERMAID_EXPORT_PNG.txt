@@ -1,0 +1,103 @@
+KODE MERMAID UNTUK EXPORT PNG - SIMON SAYS IoT PROJECT
+========================================================
+
+Gunakan kode-kode ini di Mermaid Live Editor untuk export ke PNG dengan background putih.
+Link: https://mermaid-js.github.io/mermaid-live-editor/
+
+=== DIAGRAM 1: ARSITEKTUR SISTEM IoT ===
+
+graph TD
+    subgraph "Device Layer"
+        A[ESP8266 Microcontroller]
+        B[4 LED Outputs<br/>Red, Green, Blue, Yellow]
+        C[4 Push Buttons<br/>Red, Green, Blue, Yellow]
+        D[Buzzer Audio Output]
+        E[WiFi Module<br/>802.11 b/g/n]
+    end
+    
+    subgraph "Network Layer"
+        F[Multi-WiFi Networks<br/>UGM-Secure / Personal WiFi]
+        G[HTTP/TCP Protocol]
+        H[RESTful API Communication]
+        I[JSON Data Format]
+    end
+    
+    subgraph "Application Layer"
+        J[Node.js Backend Server<br/>Express.js Framework]
+        K[Frontend Web Interface<br/>HTML5/CSS3/JavaScript]
+        L[JSON Database<br/>Leaderboard Storage]
+        M[Azure Cloud Deployment<br/>App Service]
+    end
+    
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    J --> K
+    J --> L
+    J --> M
+    
+    style A fill:#ff9999
+    style J fill:#99ccff
+    style K fill:#99ff99
+    style M fill:#ffcc99
+
+=== DIAGRAM 2: FLOWCHART ALGORITMA ===
+
+flowchart TD
+    Start([Game Start]) --> Init[Initialize Variables]
+    Init --> GenSeq[Generate Random Sequence]
+    GenSeq --> ShowSeq[Display LED Sequence]
+    ShowSeq --> WaitInput[Wait for User Input]
+    WaitInput --> ValidateInput{Input Correct?}
+    ValidateInput -->|Yes| LevelUp[Level Complete]
+    ValidateInput -->|No| GameOver[Game Over]
+    LevelUp --> GenSeq
+    GameOver --> CalcScore[Calculate Score]
+    CalcScore --> SendScore[Send to Server]
+    SendScore --> End([End])
+    
+    style Start fill:#90EE90
+    style GameOver fill:#FFB6C1
+    style End fill:#DDA0DD
+
+=== DIAGRAM 3: KOMPONEN SOFTWARE ===
+
+graph TB
+    subgraph "Frontend"
+        A[HTML5/CSS3/JavaScript]
+    end
+    
+    subgraph "Backend"
+        B[Node.js Express Server]
+        C[JSON Database]
+        D[RESTful API]
+    end
+    
+    subgraph "Firmware"
+        E[Arduino C++ ESP8266]
+        F[WiFi Management]
+        G[Game Logic]
+    end
+    
+    A --> D
+    B --> C
+    B --> D
+    E --> F
+    F --> G
+    G --> D
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style E fill:#fff3e0
+
+CARA EXPORT:
+1. Copy kode salah satu diagram
+2. Paste di Mermaid Live Editor
+3. Download PNG dengan background putih
+4. Simpan dengan nama yang sesuai 

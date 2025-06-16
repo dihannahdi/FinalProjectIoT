@@ -19,8 +19,15 @@
 #include <WiFiClientSecure.h>
 
 // ===== WIFI CONFIGURATION =====
-const char* ssid = "nahdii";
-const char* password = "bismillah2";
+// CRITICAL: Update these with your actual WiFi credentials
+const char* ssid = "Bapakmu Ijo-5G";  // ⚠️  UPDATE: Your WiFi network name
+const char* password = "rengputeh";   // ⚠️  UPDATE: Your WiFi password
+
+// WiFi troubleshooting tips:
+// 1. Make sure SSID and password are EXACTLY correct (case-sensitive)
+// 2. Check if WiFi is 2.4GHz (ESP8266 doesn't support 5GHz)
+// 3. Ensure WiFi network is not hidden
+// 4. Try connecting with a simple SSID without special characters
 
 // ===== AZURE SERVER CONFIGURATION =====
 const char* azureServerURL = "https://simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
@@ -57,9 +64,12 @@ int finalLevel = 0;           // Final level reached
 int finalScore = 0;           // Final score calculated
 bool perfectGame = false;     // Perfect game flag
 
-// ===== INPUT HANDLING VARIABLES =====
-unsigned long inputStartTime = 0;  // Moved from static to global for proper reset
-bool gameButtonPressed[4] = {false, false, false, false}; // Global button states
+// ===== IMPROVED INPUT HANDLING VARIABLES =====
+unsigned long inputStartTime = 0;  // Global input timing
+bool gameButtonPressed[4] = {false, false, false, false}; // Game-specific button states
+bool lastContinuousButtonState[4] = {false, false, false, false}; // For continuous feedback
+unsigned long lastButtonPressTime[4] = {0, 0, 0, 0}; // Debouncing for game input
+const unsigned long buttonDebounceDelay = 100; // 100ms debounce for game input
 
 // ===== WIFI STATUS VARIABLES =====
 bool wifiConnected = false;
@@ -75,8 +85,9 @@ const unsigned long webCheckInterval = 2000;
 
 // ===== CONFIGURATION OPTIONS =====
 #define DEBUG_MODE true              // Enable debug output and button testing
-#define RUN_HARDWARE_TEST false      // Run hardware test on startup (DISABLED for better responsiveness)
-#define ENABLE_BUTTON_DEBUG false    // Enable continuous button monitoring (can be noisy)
+#define RUN_HARDWARE_TEST true       // Run hardware test on startup (ENABLED for diagnostics)
+#define ENABLE_BUTTON_DEBUG true     // Enable continuous button monitoring for diagnostics
+#define ENABLE_DETAILED_BUTTON_LOGGING true  // Enable ultra-detailed button state logging
 
 // ===== ADAPTIVE TIMING CONSTANTS (EXTENDED FOR BETTER VISIBILITY) =====
 const int baseLedOnTime = 1000;     // Base LED duration (ms) - 1 second for better visibility
@@ -146,6 +157,8 @@ int calculateLedOnTime(int currentLevel);
 int calculateLedOffTime(int currentLevel);
 int calculateInputTimeout(int currentLevel);
 int calculateScore(int completedLevel, unsigned long gameTime, bool perfectGame);
+void printButtonStates();
+void printConnectivityStatus();
 
 // ===== ADAPTIVE DIFFICULTY FUNCTIONS (EXTENDED VISIBILITY) =====
 int calculateLedOnTime(int currentLevel) {
@@ -294,10 +307,8 @@ void localGameWin() {
   flashWinPattern();
 }
 
-// ===== CONTINUOUS BUTTON FEEDBACK =====
+// ===== IMPROVED CONTINUOUS BUTTON FEEDBACK =====
 void handleContinuousButtonFeedback() {
-  static bool lastButtonState[4] = {false, false, false, false};
-  
   // Ultra-fast button polling for continuous LED feedback
   for (int i = 0; i < 4; i++) {
     bool currentState = (digitalRead(button[i]) == LOW);
@@ -307,26 +318,39 @@ void handleContinuousButtonFeedback() {
       // Button is pressed - turn on LED immediately
       digitalWrite(led[i], HIGH);
       
-      // Only play sound on initial press (not continuous)
-      if (!lastButtonState[i]) {
+      // Only play sound and log on initial press (not continuous)
+      if (!lastContinuousButtonState[i]) {
         tone(buzzpin, notes[i], 150);
-        Serial.print("💡 Button ");
+        Serial.print("💡 CONTINUOUS FEEDBACK - Button ");
         Serial.print(i + 1);
-        Serial.println(" pressed - LED ON");
+        Serial.print(" (Pin D");
+        Serial.print(button[i]);
+        Serial.println(") pressed - LED ON");
+        
+        // 🔧 CRITICAL: Enhanced logging for troubleshooting
+        Serial.print("🔧 DEBUG: Pin D");
+        Serial.print(button[i]);
+        Serial.print(" voltage: ");
+        Serial.print(currentState ? "0V (LOW)" : "3.3V (HIGH)");
+        Serial.print(", LED Pin D");
+        Serial.print(led[i]);
+        Serial.println(" turned ON");
       }
     } else {
-      // Button is not pressed - turn off LED
-      digitalWrite(led[i], LOW);
+      // Button is not pressed - turn off LED (unless in game sequence display)
+      if (!waitingForInput) { // Only turn off LED if not waiting for game input
+        digitalWrite(led[i], LOW);
+      }
       
       // Only print message on release
-      if (lastButtonState[i]) {
-        Serial.print("⚫ Button ");
+      if (lastContinuousButtonState[i]) {
+        Serial.print("⚫ CONTINUOUS FEEDBACK - Button ");
         Serial.print(i + 1);
         Serial.println(" released - LED OFF");
       }
     }
     
-    lastButtonState[i] = currentState;
+    lastContinuousButtonState[i] = currentState;
   }
 }
 
@@ -377,6 +401,12 @@ void loop() {
   
   // ALWAYS handle button feedback - buttons turn on LEDs in ALL states
   handleContinuousButtonFeedback();
+  
+  // Enhanced diagnostics for troubleshooting
+  if (ENABLE_DETAILED_BUTTON_LOGGING) {
+    printButtonStates();
+    printConnectivityStatus();
+  }
   
   if (waitingForWebTrigger) {
     // Waiting for web trigger to start game
@@ -628,12 +658,14 @@ void connectToWiFi() {
   } else {
     wifiConnected = false;
     Serial.println();
-    Serial.println("ERROR: Failed to connect to WiFi after 30 seconds!");
-    Serial.println("Please check:");
-    Serial.println("- WiFi network name (SSID): nahdii");
-    Serial.println("- WiFi password");
-    Serial.println("- WiFi signal strength");
-    Serial.println("- ESP8266 is within range");
+    Serial.println("❌ ERROR: Failed to connect to WiFi after 30 seconds!");
+    Serial.println("🔧 Please check:");
+    Serial.print("📡 WiFi network name (SSID): ");
+    Serial.println(ssid);
+    Serial.println("🔑 WiFi password is correct");
+    Serial.println("📶 WiFi signal strength is adequate");
+    Serial.println("📍 ESP8266 is within range of the router");
+    Serial.println("🔄 Trying to continue with offline mode for button testing...");
   }
 }
 
@@ -1121,15 +1153,28 @@ void handleUserInput() {
   // Check for game input (button press detection for game logic)
   for (int i = 0; i < 4; i++) {
     bool currentButtonState = (digitalRead(button[i]) == LOW);
+    unsigned long currentTime = millis();
     
     // Detect button press (transition from not pressed to pressed) for game input
-    if (currentButtonState && !gameButtonPressed[i]) {
-      gameButtonPressed[i] = true;
+    // Add debouncing to prevent multiple triggers
+    if (currentButtonState && !gameButtonPressed[i] && 
+        (currentTime - lastButtonPressTime[i] > buttonDebounceDelay)) {
       
-      Serial.print("🎮 BUTTON DETECTED - Pin D");
+      gameButtonPressed[i] = true;
+      lastButtonPressTime[i] = currentTime;
+      
+      Serial.println("🎮 ==========================================");
+      Serial.print("🎮 GAME INPUT DETECTED - Button ");
+      Serial.print(i + 1);
+      Serial.print(" (Pin D");
       Serial.print(button[i]);
-      Serial.print(" = ");
+      Serial.println(")");
+      Serial.print("🎮 Digital Read Value: ");
       Serial.println(currentButtonState ? "LOW (PRESSED)" : "HIGH (NOT PRESSED)");
+      Serial.print("🎮 Debounce Time: ");
+      Serial.print(currentTime - lastButtonPressTime[i]);
+      Serial.println("ms since last press");
+      Serial.println("🎮 ==========================================");
       
       // Store input locally for validation
       userInput[inputIndex] = i + 1;
@@ -1422,4 +1467,62 @@ void flashWinPattern() {
   }
   tone(buzzpin, NOTE_B5, 500);
   // LEDs will be turned off by continuous button feedback or next game state
+}
+
+// ===== ENHANCED BUTTON DIAGNOSTICS =====
+void printButtonStates() {
+  static unsigned long lastPrint = 0;
+  if (millis() - lastPrint > 1000) { // Print every second
+    Serial.println("🔧 === BUTTON STATE DIAGNOSTIC ===");
+    for (int i = 0; i < 4; i++) {
+      bool digitalState = digitalRead(button[i]);
+      bool logicalState = (digitalState == LOW); // LOW = pressed with pull-up
+      
+      Serial.print("Button ");
+      Serial.print(i + 1);
+      Serial.print(" (Pin D");
+      Serial.print(button[i]);
+      Serial.print("): Digital=");
+      Serial.print(digitalState ? "HIGH" : "LOW");
+      Serial.print(", Logical=");
+      Serial.print(logicalState ? "PRESSED" : "NOT_PRESSED");
+      Serial.print(", Voltage=");
+      Serial.print(digitalState ? "3.3V" : "0V");
+      Serial.println();
+    }
+    Serial.println("📌 If all buttons show HIGH/NOT_PRESSED, check wiring and pull-ups");
+    Serial.println("📌 Buttons should read LOW when pressed (with INPUT_PULLUP)");
+    Serial.println("=====================================");
+    lastPrint = millis();
+  }
+}
+
+// ===== ENHANCED CONNECTIVITY DIAGNOSTICS =====
+void printConnectivityStatus() {
+  static unsigned long lastConnCheck = 0;
+  if (millis() - lastConnCheck > 5000) { // Print every 5 seconds
+    Serial.println("🌐 === CONNECTIVITY STATUS ===");
+    Serial.print("WiFi Status: ");
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("✅ CONNECTED");
+      Serial.print("IP Address: ");
+      Serial.println(WiFi.localIP());
+      Serial.print("Signal Strength: ");
+      Serial.print(WiFi.RSSI());
+      Serial.println(" dBm");
+    } else {
+      Serial.print("❌ DISCONNECTED (Code: ");
+      Serial.print(WiFi.status());
+      Serial.println(")");
+    }
+    
+    Serial.print("Server URL: ");
+    Serial.println(azureServerURL);
+    Serial.print("Player Name: ");
+    Serial.println(playerName);
+    Serial.print("Game Trigger Status: ");
+    Serial.println(waitingForWebTrigger ? "WAITING" : "ACTIVE");
+    Serial.println("===============================");
+    lastConnCheck = millis();
+  }
 } 

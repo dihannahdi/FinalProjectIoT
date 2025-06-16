@@ -6,6 +6,23 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const LEADERBOARD_FILE = './leaderboard.json';
 
+// ===== SECURITY MIDDLEWARE =====
+// Add CORS support for IoT devices
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, device-id');
+    res.header('X-Content-Type-Options', 'nosniff');
+    res.header('X-Frame-Options', 'DENY');
+    res.header('X-XSS-Protection', '1; mode=block');
+    
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
+});
+
 // ===== ENHANCED GAME TRIGGER MANAGEMENT =====
 let gameTrigger = {
     startGame: false,
@@ -290,8 +307,11 @@ app.use((req, res) => {
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-    console.log(`Access leaderboard at: http://10.33.102.140:${PORT}`);
+    console.log(`🌐 Server running on port ${PORT}`);
+    console.log(`📱 Local access: http://localhost:${PORT}`);
+    console.log(`🔗 Network access: http://0.0.0.0:${PORT}`);
+    console.log(`☁️  Azure deployment ready - use 'npm run azure-deploy'`);
+    console.log(`📊 Visit the dashboard to start playing!`);
 });
 
 // Graceful shutdown
@@ -302,5 +322,5 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
     console.log('SIGINT received. Shutting down gracefully...');
-    process.exit(0);
+    process.exit(0); 
 }); 
