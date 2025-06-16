@@ -15,10 +15,14 @@
 const char* ssid = "Bapakmu Ijo";
 const char* password = "irengputeh";
 
-// Konfigurasi Server Azure
+// Konfigurasi Server Azure - Multiple connection options
 const char* websocket_host = "simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
 const uint16_t websocket_port = 80;
 const char* websocket_path = "/socket.io/?EIO=4&transport=websocket";
+
+// Alternative connection settings (for troubleshooting)
+// const char* websocket_path = "/socket.io/?transport=websocket"; // Without EIO version
+// const uint16_t websocket_port = 443; // For HTTPS if needed
 
 // Definisi Pin
 int led[] = {D5, D6, D7, D8};  // LED untuk Red, Green, Blue, Yellow
@@ -38,6 +42,12 @@ String currentPlayerName = "";
 bool gameInProgress = false;
 bool isConnected = false;
 
+// Connection monitoring
+unsigned long lastConnectionAttempt = 0;
+unsigned long lastPingTime = 0;
+int connectionAttempts = 0;
+bool wifiConnected = false;
+
 // Variabel permainan Simon Says
 int sequence[100];  // Urutan warna yang harus diikuti
 int turn = 0;       // Putaran saat ini
@@ -56,8 +66,10 @@ int currentLed = -1;
 //================================================================
 
 void setup() {
-    Serial.begin(9600);
+    Serial.begin(115200);
+    Serial.println();
     Serial.println("=== Simon Says IoT Hardware ===");
+    Serial.println("Version: 2.0 with Enhanced WebSocket");
     Serial.println("Initializing...");
     
     // Setup pins
@@ -73,6 +85,7 @@ void setup() {
     testAllLeds();
     
     Serial.println("✅ System ready! Waiting for game trigger...");
+    printConnectionInfo();
 }
 
 //================================================================
@@ -80,8 +93,14 @@ void setup() {
 //================================================================
 
 void loop() {
+    // Check WiFi connection
+    checkWiFiConnection();
+    
     // WebSocket loop tetap berjalan
     webSocket.loop();
+    
+    // Connection monitoring
+    monitorConnection();
     
     // Game loop hanya berjalan saat game aktif
     if (gameInProgress) {
@@ -116,36 +135,60 @@ void setupPins() {
 
 void setupWifi() {
     WiFi.begin(ssid, password);
-    Serial.print("Connecting to WiFi");
+    Serial.print("🔌 Connecting to WiFi");
     
-    while (WiFi.status() != WL_CONNECTED) {
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
         delay(500);
         Serial.print(".");
+        attempts++;
     }
     
-    Serial.println();
-    Serial.print("✅ WiFi connected! IP: ");
-    Serial.println(WiFi.localIP());
+    if (WiFi.status() == WL_CONNECTED) {
+        wifiConnected = true;
+        Serial.println();
+        Serial.print("✅ WiFi connected! IP: ");
+        Serial.println(WiFi.localIP());
+        Serial.print("📶 Signal strength: ");
+        Serial.print(WiFi.RSSI());
+        Serial.println(" dBm");
+    } else {
+        Serial.println();
+        Serial.println("❌ WiFi connection failed!");
+        Serial.println("🔄 Please check your WiFi credentials and try again");
+    }
 }
 
 void setupWebSocket() {
+    if (!wifiConnected) {
+        Serial.println("⚠️ Cannot setup WebSocket - WiFi not connected");
+        return;
+    }
+    
+    Serial.println("🔗 Setting up WebSocket connection...");
+    Serial.print("Host: ");
+    Serial.println(websocket_host);
+    Serial.print("Port: ");
+    Serial.println(websocket_port);
+    Serial.print("Path: ");
+    Serial.println(websocket_path);
+    
     // server address, port and URL
     webSocket.begin(websocket_host, websocket_port, websocket_path);
     
     // event handler
     webSocket.onEvent(webSocketEvent);
     
-    // use HTTP Basic Authorization this is optional remove if not needed
-    // webSocket.setAuthorization("user", "Password");
-    
-    // try ever 5000 again if connection has failed
+    // Additional WebSocket settings for better stability
+    webSocket.enableHeartbeat(15000, 3000, 2); // ping interval, pong timeout, disconnect timeout
     webSocket.setReconnectInterval(5000);
     
     Serial.println("✅ WebSocket setup complete");
+    lastConnectionAttempt = millis();
 }
 
 void testAllLeds() {
-    Serial.println("Testing all LEDs...");
+    Serial.println("🔆 Testing all LEDs...");
     for (int i = 0; i < 4; i++) {
         digitalWrite(led[i], HIGH);
         tone(buzzer, 440 + (i * 220), 200);
@@ -157,38 +200,121 @@ void testAllLeds() {
 }
 
 //================================================================
+// CONNECTION MONITORING
+//================================================================
+
+void checkWiFiConnection() {
+    if (WiFi.status() != WL_CONNECTED && wifiConnected) {
+        Serial.println("⚠️ WiFi connection lost! Attempting reconnection...");
+        wifiConnected = false;
+        isConnected = false;
+        setupWifi();
+        if (wifiConnected) {
+            setupWebSocket();
+        }
+    }
+}
+
+void monitorConnection() {
+    // Check connection status every 30 seconds
+    if (millis() - lastConnectionAttempt > 30000) {
+        if (!isConnected && wifiConnected) {
+            connectionAttempts++;
+            Serial.print("🔄 Connection attempt #");
+            Serial.println(connectionAttempts);
+            
+            if (connectionAttempts == 3) {
+                Serial.println("🔧 Running connection diagnostic...");
+                testConnection();
+            }
+            
+            if (connectionAttempts == 5) {
+                Serial.println("🛠️ Multiple connection failures - trying alternative settings...");
+                tryAlternativeConnection();
+            }
+            
+            if (connectionAttempts > 10) {
+                Serial.println("🔄 Resetting connection attempts counter");
+                connectionAttempts = 0;
+            }
+        }
+        lastConnectionAttempt = millis();
+    }
+    
+    // Send periodic ping if connected
+    if (isConnected && millis() - lastPingTime > 60000) {
+        Serial.println("📡 Sending keepalive ping...");
+        webSocket.sendPing();
+        lastPingTime = millis();
+    }
+}
+
+void printConnectionInfo() {
+    Serial.println("\n📋 Connection Information:");
+    Serial.print("WiFi SSID: ");
+    Serial.println(ssid);
+    Serial.print("Local IP: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Gateway: ");
+    Serial.println(WiFi.gatewayIP());
+    Serial.print("DNS: ");
+    Serial.println(WiFi.dnsIP());
+    Serial.print("WebSocket Target: ");
+    Serial.print(websocket_host);
+    Serial.print(":");
+    Serial.println(websocket_port);
+    Serial.println("==========================================\n");
+}
+
+//================================================================
 // WEBSOCKET EVENT HANDLERS
 //================================================================
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     switch(type) {
         case WStype_DISCONNECTED:
-            Serial.printf("[WSc] Disconnected!\n");
+            Serial.printf("❌ [WSc] Disconnected! Reason: Connection lost\n");
             isConnected = false;
+            connectionAttempts++;
             break;
             
         case WStype_CONNECTED:
-            Serial.printf("[WSc] Connected to: %s\n", payload);
+            Serial.printf("✅ [WSc] Connected to: %s\n", payload);
             isConnected = true;
+            connectionAttempts = 0;
+            lastPingTime = millis();
             
             // Send connection message
             sendWebSocketMessage("hardware:connected", "{}");
+            Serial.println("📤 Hardware connection notification sent");
             break;
             
         case WStype_TEXT:
-            Serial.printf("[WSc] get text: %s\n", payload);
+            Serial.printf("📨 [WSc] Received text: %s\n", payload);
             handleWebSocketMessage((char*)payload);
             break;
             
         case WStype_BIN:
-            Serial.printf("[WSc] get binary length: %u\n", length);
+            Serial.printf("📦 [WSc] Received binary length: %u\n", length);
+            break;
+            
+        case WStype_PING:
+            Serial.println("🏓 [WSc] Received ping");
+            break;
+            
+        case WStype_PONG:
+            Serial.println("🏓 [WSc] Received pong");
             break;
             
         case WStype_ERROR:
+            Serial.printf("❌ [WSc] Error: %s\n", payload);
+            break;
+            
         case WStype_FRAGMENT_TEXT_START:
         case WStype_FRAGMENT_BIN_START:
         case WStype_FRAGMENT:
         case WStype_FRAGMENT_FIN:
+            Serial.println("📦 [WSc] Fragment received");
             break;
     }
 }
@@ -202,12 +328,21 @@ void handleWebSocketMessage(String message) {
         String jsonStr = message.substring(2);
         
         StaticJsonDocument<512> doc;
-        deserializeJson(doc, jsonStr);
+        DeserializationError error = deserializeJson(doc, jsonStr);
+        
+        if (error) {
+            Serial.print("⚠️ JSON parse error: ");
+            Serial.println(error.c_str());
+            return;
+        }
         
         if (doc.is<JsonArray>()) {
             JsonArray arr = doc.as<JsonArray>();
             if (arr.size() >= 1) {
                 String eventName = arr[0].as<String>();
+                
+                Serial.print("🎯 Event received: ");
+                Serial.println(eventName);
                 
                 if (eventName == "server:trigger-game") {
                     triggerGameHandler();
@@ -225,9 +360,13 @@ void sendWebSocketMessage(String eventName, String data) {
     
     // Socket.IO format: 42["event_name", data]
     String message = "42[\"" + eventName + "\"," + data + "]";
-    webSocket.sendTXT(message);
+    bool success = webSocket.sendTXT(message);
     
-    Serial.println("📤 Mengirim: " + message);
+    if (success) {
+        Serial.println("📤 Message sent successfully: " + message);
+    } else {
+        Serial.println("❌ Failed to send message: " + message);
+    }
 }
 
 void triggerGameHandler() {
@@ -240,6 +379,87 @@ void triggerGameHandler() {
     
     gameInProgress = true;
     startGameLogic();
+}
+
+//================================================================
+// TROUBLESHOOTING FUNCTIONS
+//================================================================
+
+void testConnection() {
+    Serial.println("\n🔧 CONNECTION DIAGNOSTIC TEST");
+    Serial.println("==============================");
+    
+    // Test 1: WiFi Status
+    Serial.print("WiFi Status: ");
+    switch(WiFi.status()) {
+        case WL_CONNECTED:
+            Serial.println("✅ Connected");
+            break;
+        case WL_NO_SSID_AVAIL:
+            Serial.println("❌ SSID not available");
+            break;
+        case WL_CONNECT_FAILED:
+            Serial.println("❌ Connection failed");
+            break;
+        case WL_CONNECTION_LOST:
+            Serial.println("❌ Connection lost");
+            break;
+        case WL_DISCONNECTED:
+            Serial.println("❌ Disconnected");
+            break;
+        default:
+            Serial.println("❓ Unknown status");
+    }
+    
+    // Test 2: Network Info
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.print("IP Address: ");
+        Serial.println(WiFi.localIP());
+        Serial.print("Gateway: ");
+        Serial.println(WiFi.gatewayIP());
+        Serial.print("DNS: ");
+        Serial.println(WiFi.dnsIP());
+        Serial.print("Signal Strength: ");
+        Serial.print(WiFi.RSSI());
+        Serial.println(" dBm");
+    }
+    
+    // Test 3: WebSocket Status
+    Serial.print("WebSocket Connected: ");
+    Serial.println(isConnected ? "✅ Yes" : "❌ No");
+    Serial.print("Connection Attempts: ");
+    Serial.println(connectionAttempts);
+    
+    Serial.println("==============================\n");
+}
+
+void tryAlternativeConnection() {
+    Serial.println("🔄 Trying alternative connection method...");
+    
+    // Disconnect current WebSocket
+    webSocket.disconnect();
+    delay(1000);
+    
+    // Try without EIO version parameter
+    Serial.println("Attempting connection without EIO version...");
+    webSocket.begin(websocket_host, websocket_port, "/socket.io/?transport=websocket");
+    webSocket.onEvent(webSocketEvent);
+    webSocket.enableHeartbeat(15000, 3000, 2);
+    webSocket.setReconnectInterval(5000);
+    
+    delay(5000); // Wait for connection attempt
+    
+    if (!isConnected) {
+        Serial.println("Alternative method 1 failed, trying method 2...");
+        webSocket.disconnect();
+        delay(1000);
+        
+        // Try basic WebSocket path
+        webSocket.begin(websocket_host, websocket_port, "/socket.io/");
+        webSocket.onEvent(webSocketEvent);
+        webSocket.enableHeartbeat(15000, 3000, 2);
+        webSocket.setReconnectInterval(5000);
+    }
 }
 
 //================================================================
