@@ -191,3 +191,202 @@ wscat -c wss://your-app-name.azurewebsites.net/socket.io/?transport=websocket
 5. ✅ Comprehensive deployment documentation
 
 **Next Step:** Choose deployment method dan push ke Azure! 🚀 
+
+# 🚀 Azure Deployment Instructions
+
+## 📋 Prerequisites
+
+1. **Azure Account** with active subscription
+2. **GitHub Repository** with your code
+3. **Azure CLI** installed (optional, for manual setup)
+
+## 🔧 Step 1: Create Azure App Service
+
+### Option A: Using Azure Portal
+
+1. **Go to Azure Portal** → Create a resource → Web App
+2. **Configure Basic Settings:**
+   - **Subscription:** Your Azure subscription
+   - **Resource Group:** Create new or use existing
+   - **Name:** `simon-says-iot` (or your preferred name)
+   - **Publish:** Code
+   - **Runtime Stack:** Node 22 LTS
+   - **Operating System:** Linux
+   - **Region:** Choose closest to your users
+
+3. **Review + Create** → Create
+
+### Option B: Using Azure CLI
+
+```bash
+# Login to Azure
+az login
+
+# Create resource group
+az group create --name simon-says-rg --location "East US"
+
+# Create App Service plan
+az appservice plan create --name simon-says-plan --resource-group simon-says-rg --sku B1 --is-linux
+
+# Create web app
+az webapp create --resource-group simon-says-rg --plan simon-says-plan --name simon-says-iot --runtime "NODE:22-lts"
+```
+
+## 🔐 Step 2: Set up GitHub Actions Secrets
+
+### Required Secrets:
+
+1. **AZURE_CREDENTIALS** - Service Principal JSON
+2. **AZURE_APP_NAME** - Your Azure app name
+
+### Creating AZURE_CREDENTIALS:
+
+```bash
+# Create service principal
+az ad sp create-for-rbac --name "simon-says-deploy" --role contributor --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group} --sdk-auth
+```
+
+Copy the JSON output and add it as `AZURE_CREDENTIALS` secret in GitHub.
+
+### Adding Secrets to GitHub:
+
+1. Go to your **GitHub Repository**
+2. **Settings** → **Secrets and variables** → **Actions**
+3. **New repository secret:**
+   - Name: `AZURE_CREDENTIALS`
+   - Value: The JSON from service principal creation
+4. **New repository secret:**
+   - Name: `AZURE_APP_NAME`
+   - Value: `simon-says-iot` (your app name)
+
+## ⚙️ Step 3: Configure Azure App Service
+
+### Environment Variables:
+
+Go to Azure Portal → Your App Service → **Configuration** → **Application settings**
+
+Add these variables:
+
+```
+NODE_ENV=production
+WEBSITE_NODE_DEFAULT_VERSION=~22
+WEBSITE_NPM_DEFAULT_VERSION=8.19.2
+PORT=8080
+LOG_LEVEL=info
+ALLOWED_ORIGINS=https://your-app-name.azurewebsites.net
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=1000
+SCM_DO_BUILD_DURING_DEPLOYMENT=true
+WEBSITE_DYNAMIC_CACHE=0
+```
+
+Replace `your-app-name` with your actual Azure app name.
+
+## 🌐 Step 4: Enable WebSocket Support
+
+1. Go to Azure Portal → Your App Service
+2. **Configuration** → **General settings**
+3. **Web sockets:** ON
+4. **Save**
+
+## 📦 Step 5: Deploy
+
+### Automatic Deployment (Recommended):
+
+1. **Commit and push** your code to main branch:
+
+```bash
+git add .
+git commit -m "Add monitoring system and fix Azure deployment"
+git push origin main
+```
+
+2. **Check GitHub Actions** tab in your repository
+3. **Monitor deployment** progress
+4. **Visit your app** at `https://your-app-name.azurewebsites.net`
+
+### Manual Deployment:
+
+1. Go to **GitHub Repository** → **Actions**
+2. Select **Deploy to Azure App Service** workflow
+3. Click **Run workflow** → **Run workflow**
+
+## 🔍 Step 6: Verify Deployment
+
+Test these endpoints:
+
+- **Main App:** `https://your-app-name.azurewebsites.net`
+- **Health Check:** `https://your-app-name.azurewebsites.net/health`
+- **Metrics:** `https://your-app-name.azurewebsites.net/api/metrics`
+- **Leaderboard:** `https://your-app-name.azurewebsites.net/api/leaderboard`
+
+## 🐛 Troubleshooting
+
+### Common Issues:
+
+#### 1. **Application Error / 500 Error**
+- Check **Azure Portal** → **App Service** → **Log stream**
+- Verify all environment variables are set
+- Check if Node.js version is correct
+
+#### 2. **Build Fails in GitHub Actions**
+- Verify `AZURE_CREDENTIALS` secret is correct
+- Check if service principal has proper permissions
+- Ensure `AZURE_APP_NAME` matches your app name
+
+#### 3. **WebSocket Not Working**
+- Enable WebSockets in Azure App Service configuration
+- Check if port is correctly set to `8080`
+- Verify CORS settings allow your domain
+
+### Debug Commands:
+
+```bash
+# Check Azure app logs
+az webapp log tail --name simon-says-iot --resource-group simon-says-rg
+
+# Restart the app
+az webapp restart --name simon-says-iot --resource-group simon-says-rg
+
+# Check app status
+az webapp show --name simon-says-iot --resource-group simon-says-rg --query state
+```
+
+## 📊 Monitoring
+
+Your app includes comprehensive monitoring:
+
+- **Structured Logs:** Available in Azure Log Analytics
+- **Health Endpoint:** `/health` for uptime monitoring
+- **Metrics Endpoint:** `/api/metrics` for performance data
+- **Error Tracking:** Automatic error logging and alerting
+
+## 🔄 Updates
+
+To deploy updates:
+
+1. Make your changes locally
+2. Test thoroughly
+3. Commit and push to main branch
+4. GitHub Actions will automatically deploy
+
+## 📞 Support
+
+If deployment fails:
+
+1. **Check GitHub Actions logs** for build errors
+2. **Check Azure App Service logs** for runtime errors
+3. **Verify all secrets and environment variables**
+4. **Ensure WebSocket support is enabled**
+
+## 🎉 Success!
+
+Once deployed successfully, your Simon Says IoT system will be live at:
+`https://your-app-name.azurewebsites.net`
+
+The system includes:
+- ✅ Real-time WebSocket communication
+- ✅ Comprehensive monitoring and logging
+- ✅ Health checks and metrics
+- ✅ Rate limiting and security
+- ✅ Automatic error tracking 

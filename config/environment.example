@@ -1,0 +1,23 @@
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+
+# Logging Configuration
+LOG_LEVEL=info
+
+# Security Configuration
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+# Rate Limiting Configuration
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# Monitoring Configuration
+MEMORY_ALERT_THRESHOLD_MB=200
+HEAP_USAGE_ALERT_PERCENTAGE=80
+SYSTEM_METRICS_INTERVAL_MINUTES=5
+METRICS_SUMMARY_INTERVAL_HOURS=1
+
+# Application Metadata
+npm_package_version=1.0.0
+npm_package_name=simonsays-iot 

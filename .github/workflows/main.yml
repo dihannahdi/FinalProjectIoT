@@ -6,7 +6,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # <--- TRIGGER UNTUK MANUAL DEPLOYMENT DARI AZURE PORTAL
+  workflow_dispatch: # Manual deployment trigger
 
 jobs:
   build-and-deploy:
@@ -20,9 +20,18 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '22.x'
+        cache: 'npm'
 
     - name: 'Install Dependencies'
-      run: npm install
+      run: |
+        npm ci --only=production
+        npm prune --production
+
+    - name: 'Create required directories'
+      run: |
+        mkdir -p data
+        mkdir -p logs
+        echo '[]' > data/leaderboard.json
 
     - name: 'Login to Azure'
       uses: azure/login@v2
@@ -32,5 +41,9 @@ jobs:
     - name: 'Deploy to Azure Web App'
       uses: azure/webapps-deploy@v3
       with:
-        app-name: 'simon-says'
-        package: '.' 
+        app-name: ${{ secrets.AZURE_APP_NAME || 'simon-says' }}
+        package: '.'
+
+    - name: 'Azure logout'
+      run: |
+        az logout 
