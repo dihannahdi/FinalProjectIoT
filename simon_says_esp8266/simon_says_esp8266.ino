@@ -1,10 +1,10 @@
 //================================================================
 // Simon Says IoT - ESP8266 Hardware Component
-// Dengan Socket.IO Client untuk komunikasi real-time
+// Dengan WebSocket Client untuk komunikasi real-time
 //================================================================
 
 #include <ESP8266WiFi.h>
-#include <SocketIOClient.h>
+#include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 
 //================================================================
@@ -15,9 +15,10 @@
 const char* ssid = "Bapakmu Ijo";
 const char* password = "irengputeh";
 
-// Konfigurasi Server
-const char* socket_io_host = "simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
-const uint16_t socket_io_port = 80;
+// Konfigurasi Server Azure
+const char* websocket_host = "simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
+const uint16_t websocket_port = 80;
+const char* websocket_path = "/socket.io/?EIO=4&transport=websocket";
 
 // Definisi Pin
 int led[] = {D5, D6, D7, D8};  // LED untuk Red, Green, Blue, Yellow
@@ -32,9 +33,10 @@ int ledColors[] = {0, 1, 2, 3}; // Index untuk LED
 // VARIABEL STATUS GLOBAL
 //================================================================
 
-SocketIOClient socketIO;
+WebSocketsClient webSocket;
 String currentPlayerName = "";
 bool gameInProgress = false;
+bool isConnected = false;
 
 // Variabel permainan Simon Says
 int sequence[100];  // Urutan warna yang harus diikuti
@@ -64,8 +66,8 @@ void setup() {
     // Setup Wi-Fi
     setupWifi();
     
-    // Setup Socket.IO
-    setupSocketIO();
+    // Setup WebSocket
+    setupWebSocket();
     
     // Test semua LED
     testAllLeds();
@@ -78,8 +80,16 @@ void setup() {
 //================================================================
 
 void loop() {
-    // HANYA Socket.IO loop - semua logika adalah event-driven
-    socketIO.loop();
+    // WebSocket loop tetap berjalan
+    webSocket.loop();
+    
+    // Game loop hanya berjalan saat game aktif
+    if (gameInProgress) {
+        gameLoop();
+    }
+    
+    // Small delay untuk stabilitas
+    delay(10);
 }
 
 //================================================================
@@ -118,13 +128,20 @@ void setupWifi() {
     Serial.println(WiFi.localIP());
 }
 
-void setupSocketIO() {
-    socketIO.begin(socket_io_host, socket_io_port);
+void setupWebSocket() {
+    // server address, port and URL
+    webSocket.begin(websocket_host, websocket_port, websocket_path);
     
-    // Event handler untuk trigger game
-    socketIO.on("server:trigger-game", triggerGameHandler);
+    // event handler
+    webSocket.onEvent(webSocketEvent);
     
-    Serial.println("✅ Socket.IO connected to server");
+    // use HTTP Basic Authorization this is optional remove if not needed
+    // webSocket.setAuthorization("user", "Password");
+    
+    // try ever 5000 again if connection has failed
+    webSocket.setReconnectInterval(5000);
+    
+    Serial.println("✅ WebSocket setup complete");
 }
 
 void testAllLeds() {
@@ -140,10 +157,80 @@ void testAllLeds() {
 }
 
 //================================================================
-// SOCKET.IO EVENT HANDLERS
+// WEBSOCKET EVENT HANDLERS
 //================================================================
 
-void triggerGameHandler(const char* payload, size_t length) {
+void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+    switch(type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[WSc] Disconnected!\n");
+            isConnected = false;
+            break;
+            
+        case WStype_CONNECTED:
+            Serial.printf("[WSc] Connected to: %s\n", payload);
+            isConnected = true;
+            
+            // Send connection message
+            sendWebSocketMessage("hardware:connected", "{}");
+            break;
+            
+        case WStype_TEXT:
+            Serial.printf("[WSc] get text: %s\n", payload);
+            handleWebSocketMessage((char*)payload);
+            break;
+            
+        case WStype_BIN:
+            Serial.printf("[WSc] get binary length: %u\n", length);
+            break;
+            
+        case WStype_ERROR:
+        case WStype_FRAGMENT_TEXT_START:
+        case WStype_FRAGMENT_BIN_START:
+        case WStype_FRAGMENT:
+        case WStype_FRAGMENT_FIN:
+            break;
+    }
+}
+
+void handleWebSocketMessage(String message) {
+    Serial.println("📨 Pesan diterima: " + message);
+    
+    // Parse Socket.IO message format
+    if (message.startsWith("42")) {
+        // Remove Socket.IO prefix
+        String jsonStr = message.substring(2);
+        
+        StaticJsonDocument<512> doc;
+        deserializeJson(doc, jsonStr);
+        
+        if (doc.is<JsonArray>()) {
+            JsonArray arr = doc.as<JsonArray>();
+            if (arr.size() >= 1) {
+                String eventName = arr[0].as<String>();
+                
+                if (eventName == "server:trigger-game") {
+                    triggerGameHandler();
+                }
+            }
+        }
+    }
+}
+
+void sendWebSocketMessage(String eventName, String data) {
+    if (!isConnected) {
+        Serial.println("⚠️ WebSocket not connected, cannot send message");
+        return;
+    }
+    
+    // Socket.IO format: 42["event_name", data]
+    String message = "42[\"" + eventName + "\"," + data + "]";
+    webSocket.sendTXT(message);
+    
+    Serial.println("📤 Mengirim: " + message);
+}
+
+void triggerGameHandler() {
     Serial.println("🎮 Perintah mulai diterima!");
     
     if (gameInProgress) {
@@ -332,7 +419,7 @@ void submitScore(int score) {
     serializeJson(doc, jsonBuffer);
     
     // Send event to server
-    socketIO.emit("hardware:submit-score", jsonBuffer.c_str());
+    sendWebSocketMessage("hardware:submit-score", jsonBuffer);
     
     Serial.print("Skor terkirim: ");
     Serial.println(jsonBuffer);
@@ -356,21 +443,4 @@ void gameLoop() {
     if (gameInProgress && userTurn) {
         checkUserInput();
     }
-}
-
-//================================================================
-// MODIFIED LOOP DENGAN GAME LOGIC
-//================================================================
-
-void loop() {
-    // Socket.IO loop tetap berjalan
-    socketIO.loop();
-    
-    // Game loop hanya berjalan saat game aktif
-    if (gameInProgress) {
-        gameLoop();
-    }
-    
-    // Small delay untuk stabilitas
-    delay(10);
 } 
