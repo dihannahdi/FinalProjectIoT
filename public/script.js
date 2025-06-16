@@ -14,7 +14,7 @@ const socket = io({
 // DOM Elements
 const playerNameInput = document.getElementById('playerNameInput');
 const startButton = document.getElementById('startButton');
-const statusMessage = document.getElementById('statusMessage');
+const statusMessage = document.getElementById('status');
 const leaderboard = document.getElementById('leaderboard');
 const connectionStatus = document.getElementById('connectionStatus');
 
@@ -24,6 +24,18 @@ let gameInProgress = false;
 
 // Initialize the application
 function init() {
+    // Check if all required DOM elements exist
+    if (!playerNameInput || !startButton || !statusMessage || !leaderboard || !connectionStatus) {
+        console.error('Some required DOM elements are missing:', {
+            playerNameInput: !!playerNameInput,
+            startButton: !!startButton,
+            statusMessage: !!statusMessage,
+            leaderboard: !!leaderboard,
+            connectionStatus: !!connectionStatus
+        });
+        return;
+    }
+    
     setupEventListeners();
     fetchInitialLeaderboard();
 }
@@ -370,15 +382,23 @@ function updateConnectionStatus(connected) {
 }
 
 function showStatusMessage(message, type = 'active') {
-    statusMessage.textContent = message;
-    statusMessage.className = `status-message ${type}`;
-    statusMessage.style.display = 'flex';
+    if (statusMessage) {
+        statusMessage.textContent = message;
+        statusMessage.className = `status-message ${type}`;
+        statusMessage.style.display = 'flex';
+    } else {
+        console.warn('Status message element not found');
+    }
 }
 
 function clearStatusMessage() {
-    statusMessage.textContent = '';
-    statusMessage.className = 'status-message';
-    statusMessage.style.display = 'none';
+    if (statusMessage) {
+        statusMessage.textContent = '';
+        statusMessage.className = 'status-message';
+        statusMessage.style.display = 'none';
+    } else {
+        console.warn('Status message element not found');
+    }
 }
 
 // Add additional Socket.IO event listeners for debugging
