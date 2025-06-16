@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simon Says IoT - Leaderboard & Game Control</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎮 Simon Says IoT</h1>
+            <p>Kendalikan perangkat fisik dan lihat papan peringkat secara real-time!</p>
+        </header>
+
+        <!-- Game Control Section -->
+        <section class="game-control">
+            <div class="input-group">
+                <label for="playerNameInput">Nama Pemain:</label>
+                <input 
+                    type="text" 
+                    id="playerNameInput" 
+                    placeholder="Masukkan nama Anda..." 
+                    maxlength="20"
+                    autocomplete="off"
+                />
+            </div>
+            
+            <button id="startButton" class="start-btn">
+                🎯 Mulai Permainan
+            </button>
+            
+            <div id="statusMessage" class="status-message"></div>
+        </section>
+
+        <!-- Leaderboard Section -->
+        <section class="leaderboard-section">
+            <h2>🏆 Papan Peringkat</h2>
+            <div class="leaderboard-container">
+                <div id="leaderboard" class="leaderboard">
+                    <!-- Leaderboard will be populated here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Connection Status -->
+        <footer class="footer">
+            <div class="connection-status">
+                <span id="connectionStatus">🔌 Menghubungkan...</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Socket.IO Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html> 
