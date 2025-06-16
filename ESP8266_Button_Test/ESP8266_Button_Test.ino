@@ -14,9 +14,9 @@ const char* ssid = "Bapakmu Ijo";  // Same network as your computer
 const char* password = "irengputeh";   // Password for main WiFi
 
 // ===== SERVER CONFIGURATION =====
-// Test local server first, then switch to Azure
-const char* serverURL = "http://192.168.1.6:3000";  // Your computer's actual IP address
-// const char* serverURL = "https://simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";  // Azure server (switch to this after local testing works)
+// Updated to use your actual Azure deployment
+// const char* serverURL = "http://192.168.1.6:3000";  // Local testing server (commented out)
+const char* serverURL = "https://simon-says-eqhqgycwcothveg.canadacentral-01.azurewebsites.net";  // Your actual Azure server URL
 
 // ===== HARDWARE PINS =====
 // Updated to match your actual wiring based on test results

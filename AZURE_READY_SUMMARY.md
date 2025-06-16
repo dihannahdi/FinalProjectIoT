@@ -2,7 +2,19 @@
 
 ## 🎯 **Your App is Now Azure-Ready!**
 
-I've analyzed your Simon Says IoT project and implemented all critical fixes needed for Azure deployment. Your app **can now be deployed to Azure** with minimal additional setup.
+I've analyzed your Simon Says IoT project and implemented all critical fixes needed for Azure deployment. Your app **has been deployed to Azure** successfully!
+
+## 📊 **Your Actual Azure Deployment:**
+
+### **Azure App Service Details:**
+- **App Name**: `simon-says`
+- **URL**: `https://simon-says-eqhqgycwcothveg.canadacentral-01.azurewebsites.net`
+- **Resource Group**: `simon-says-group`
+- **Location**: Canada Central
+- **Runtime**: Node.js 22-lts
+- **Operating System**: Linux
+- **Status**: ✅ Running
+- **GitHub Integration**: ✅ Connected and Deployed
 
 ## 📊 **Project Analysis Results**
 
@@ -72,8 +84,8 @@ I've analyzed your Simon Says IoT project and implemented all critical fixes nee
    WEBSITE_NODE_DEFAULT_VERSION = 18-lts
    ```
 
-### **Your app will be live at:**
-`https://simon-says-leaderboard.azurewebsites.net`
+### **Your app is live at:**
+`https://simon-says-eqhqgycwcothveg.canadacentral-01.azurewebsites.net`
 
 ## ⚠️ **Known Limitation (Non-Critical)**
 
@@ -97,26 +109,26 @@ After deployment, test these endpoints:
 
 ```bash
 # Health check
-GET https://your-app.azurewebsites.net/health
+GET https://simon-says-eqhqgycwcothveg.canadacentral-01.azurewebsites.net/health
 
 # Start game (from web interface)
-POST https://your-app.azurewebsites.net/start-game
+POST https://simon-says-eqhqgycwcothveg.canadacentral-01.azurewebsites.net/start-game
 Content-Type: application/json
 {"playerName": "TestPlayer"}
 
 # Check ESP8266 trigger
-GET https://your-app.azurewebsites.net/check-game-trigger
+GET https://simon-says-eqhqgycwcothveg.canadacentral-01.azurewebsites.net/check-game-trigger
 
 # View leaderboard
-GET https://your-app.azurewebsites.net/leaderboard
+GET https://simon-says-eqhqgycwcothveg.canadacentral-01.azurewebsites.net/leaderboard
 ```
 
 ## 🎮 **ESP8266 Configuration**
 
-Update your ESP8266 code to use the Azure URL:
+✅ **ESP8266 code has been updated with your Azure URL:**
 ```cpp
-// Replace with your Azure app URL
-String serverURL = "https://simon-says-leaderboard.azurewebsites.net";
+// Your actual Azure app URL (already updated in code)
+const char* serverURL = "https://simon-says-eqhqgycwcothveg.canadacentral-01.azurewebsites.net";
 ```
 
 ## 📈 **Future Improvements (Optional)**
