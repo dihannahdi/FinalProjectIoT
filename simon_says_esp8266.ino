@@ -5,6 +5,8 @@
 
 #include <ESP8266WiFi.h>
 #include <WebSocketsClient.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 #include <ArduinoJson.h>
 
 //================================================================
@@ -15,14 +17,18 @@
 const char* ssid = "Bapakmu Ijo";
 const char* password = "irengputeh";
 
-// Konfigurasi Server Azure - Multiple connection options
-const char* websocket_host = "simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
-const uint16_t websocket_port = 80;
-const char* websocket_path = "/socket.io/?EIO=4&transport=websocket";
+// Konfigurasi Server - Easy switch between local and Azure
+// Uncomment ONE of these configurations:
 
-// Alternative connection settings (for troubleshooting)
-// const char* websocket_path = "/socket.io/?transport=websocket"; // Without EIO version
-// const uint16_t websocket_port = 443; // For HTTPS if needed
+// === LOCAL TESTING ===
+const char* websocket_host = "192.168.1.6";  // Your computer's IP address
+const uint16_t websocket_port = 3000;  // Same port as main server
+const char* websocket_path = "/hardware-ws";  // Hardware WebSocket path
+
+// === AZURE DEPLOYMENT === 
+// const char* websocket_host = "simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
+// const uint16_t websocket_port = 80;  // Standard HTTP port
+// const char* websocket_path = "/hardware-ws";  // Hardware WebSocket path
 
 // Definisi Pin
 int led[] = {D5, D6, D7, D8};  // LED untuk Red, Green, Blue, Yellow
@@ -32,6 +38,21 @@ int buzzer = D0;  // Pin buzzer
 // Warna dan nama
 String colors[] = {"RED", "GREEN", "BLUE", "YELLOW"};
 int ledColors[] = {0, 1, 2, 3}; // Index untuk LED
+
+//================================================================
+// STRUKTUR DATA SKOR KOMPLEKS
+//================================================================
+
+struct ComplexScore {
+    int baseScore;          // Level yang dicapai
+    unsigned long totalDuration;   // Total durasi game (ms)
+    int timeBonus;          // Bonus kecepatan (0-500)
+    int accuracyBonus;      // Bonus konsistensi (0-200) 
+    unsigned long avgResponseTime;  // Rata-rata response time
+    unsigned long fastestTime;      // Response tercepat
+    unsigned long slowestTime;      // Response terlambat
+    int finalScore;         // Skor final
+};
 
 //================================================================
 // VARIABEL STATUS GLOBAL
@@ -55,6 +76,16 @@ int seqL = 0;       // Panjang urutan saat ini
 unsigned long timer = 0;
 bool userTurn = false;
 int userInput = 0;
+
+// === TRACKING SKOR KOMPLEKS ===
+unsigned long gameStartTime = 0;        // Waktu mulai game
+unsigned long levelStartTime = 0;       // Waktu mulai level
+unsigned long totalGameDuration = 0;    // Total durasi game dalam ms
+unsigned long responseTimes[100];       // Array untuk menyimpan response time tiap input
+int responseCount = 0;                  // Jumlah response yang direkam
+unsigned long fastestResponse = 99999;  // Response tercepat
+unsigned long slowestResponse = 0;      // Response terlambat
+unsigned long totalResponseTime = 0;    // Total waktu response
 
 // Status LED dan timing
 bool ledState = false;
@@ -216,8 +247,8 @@ void checkWiFiConnection() {
 }
 
 void monitorConnection() {
-    // Check connection status every 30 seconds
-    if (millis() - lastConnectionAttempt > 30000) {
+    // Check connection status every 10 seconds for faster recovery
+    if (millis() - lastConnectionAttempt > 10000) {
         if (!isConnected && wifiConnected) {
             connectionAttempts++;
             Serial.print("🔄 Connection attempt #");
@@ -285,7 +316,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             lastPingTime = millis();
             
             // Send connection message
-            sendWebSocketMessage("hardware:connected", "{}");
+            sendWebSocketMessage("connected", "{}");
             Serial.println("📤 Hardware connection notification sent");
             break;
             
@@ -322,44 +353,62 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 void handleWebSocketMessage(String message) {
     Serial.println("📨 Pesan diterima: " + message);
     
-    // Parse Socket.IO message format
-    if (message.startsWith("42")) {
-        // Remove Socket.IO prefix
-        String jsonStr = message.substring(2);
+    // Parse simple JSON message format (not Socket.IO)
+    StaticJsonDocument<512> doc;
+    DeserializationError error = deserializeJson(doc, message);
+    
+    if (error) {
+        Serial.print("⚠️ JSON parse error: ");
+        Serial.println(error.c_str());
+        return;
+    }
+    
+    // Check message type
+    if (doc.containsKey("type")) {
+        String messageType = doc["type"].as<String>();
         
-        StaticJsonDocument<512> doc;
-        DeserializationError error = deserializeJson(doc, jsonStr);
+        Serial.print("🎯 Message type: ");
+        Serial.println(messageType);
         
-        if (error) {
-            Serial.print("⚠️ JSON parse error: ");
-            Serial.println(error.c_str());
-            return;
-        }
-        
-        if (doc.is<JsonArray>()) {
-            JsonArray arr = doc.as<JsonArray>();
-            if (arr.size() >= 1) {
-                String eventName = arr[0].as<String>();
-                
-                Serial.print("🎯 Event received: ");
-                Serial.println(eventName);
-                
-                if (eventName == "server:trigger-game") {
-                    triggerGameHandler();
-                }
-            }
+        if (messageType == "connected") {
+            Serial.println("✅ Hardware connected to server!");
+            // Send confirmation back
+            sendWebSocketMessage("ready", "{}");
+            
+        } else if (messageType == "trigger-game") {
+            triggerGameHandler();
+            
+        } else {
+            Serial.println("⚠️ Unknown message type: " + messageType);
         }
     }
 }
 
-void sendWebSocketMessage(String eventName, String data) {
+void sendWebSocketMessage(String messageType, String data) {
     if (!isConnected) {
         Serial.println("⚠️ WebSocket not connected, cannot send message");
         return;
     }
     
-    // Socket.IO format: 42["event_name", data]
-    String message = "42[\"" + eventName + "\"," + data + "]";
+    // Create simple JSON message
+    StaticJsonDocument<256> doc;
+    doc["type"] = messageType;
+    
+    // Parse data if it's JSON, otherwise use as string
+    if (data.startsWith("{")) {
+        StaticJsonDocument<128> dataDoc;
+        if (deserializeJson(dataDoc, data) == DeserializationError::Ok) {
+            doc["data"] = dataDoc;
+        } else {
+            doc["data"] = data;
+        }
+    } else {
+        doc["data"] = data;
+    }
+    
+    String message;
+    serializeJson(doc, message);
+    
     bool success = webSocket.sendTXT(message);
     
     if (success) {
@@ -434,15 +483,15 @@ void testConnection() {
 }
 
 void tryAlternativeConnection() {
-    Serial.println("🔄 Trying alternative connection method...");
+    Serial.println("🔄 Trying to reconnect WebSocket...");
     
     // Disconnect current WebSocket
     webSocket.disconnect();
-    delay(1000);
+    delay(2000);
     
-    // Try without EIO version parameter
-    Serial.println("Attempting connection without EIO version...");
-    webSocket.begin(websocket_host, websocket_port, "/socket.io/?transport=websocket");
+    // Reconnect with same settings
+    Serial.println("Attempting reconnection...");
+    webSocket.begin(websocket_host, websocket_port, websocket_path);
     webSocket.onEvent(webSocketEvent);
     webSocket.enableHeartbeat(15000, 3000, 2);
     webSocket.setReconnectInterval(5000);
@@ -450,15 +499,10 @@ void tryAlternativeConnection() {
     delay(5000); // Wait for connection attempt
     
     if (!isConnected) {
-        Serial.println("Alternative method 1 failed, trying method 2...");
-        webSocket.disconnect();
-        delay(1000);
-        
-        // Try basic WebSocket path
-        webSocket.begin(websocket_host, websocket_port, "/socket.io/");
-        webSocket.onEvent(webSocketEvent);
-        webSocket.enableHeartbeat(15000, 3000, 2);
-        webSocket.setReconnectInterval(5000);
+        Serial.println("❌ Reconnection failed");
+        Serial.println("🔧 Check server status and network connectivity");
+    } else {
+        Serial.println("✅ Reconnection successful!");
     }
 }
 
@@ -469,17 +513,78 @@ void tryAlternativeConnection() {
 void startGameLogic() {
     Serial.println("🎯 Memulai Simon Says Game Logic");
     
+    // Tampilkan animasi startup
+    startupAnimation();
+    
     // Reset variabel game
     turn = 0;
     seqL = 0;
     userInput = 0;
     userTurn = false;
     
+    // === RESET TRACKING SKOR KOMPLEKS ===
+    gameStartTime = millis();
+    levelStartTime = 0;
+    totalGameDuration = 0;
+    responseCount = 0;
+    fastestResponse = 99999;
+    slowestResponse = 0;
+    totalResponseTime = 0;
+    
+    Serial.println("📊 Memulai tracking skor kompleks...");
+    Serial.print("⏱️ Game start time: ");
+    Serial.println(gameStartTime);
+    
     // Seed random generator
     randomSeed(analogRead(A0));
     
     // Mulai permainan
     nextTurn();
+}
+
+//================================================================
+// ANIMASI STARTUP
+//================================================================
+
+void startupAnimation() {
+    Serial.println("🎊 Memulai animasi startup: 1-2-3-4-3-2-1");
+    
+    // Pola: 1-2-3-4-3-2-1 (LED index 0,1,2,3,2,1,0)
+    int startPattern[] = {0, 1, 2, 3, 2, 1, 0};
+    int patternLength = 7;
+    
+    // Matikan semua LED terlebih dahulu
+    for (int i = 0; i < 4; i++) {
+        digitalWrite(led[i], LOW);
+    }
+    
+    delay(500); // Jeda sebelum mulai
+    
+    // Jalankan pola startup
+    for (int i = 0; i < patternLength; i++) {
+        int currentLed = startPattern[i];
+        
+        // Nyalakan LED dan mainkan nada
+        digitalWrite(led[currentLed], HIGH);
+        playTone(currentLed);
+        
+        Serial.print("LED ");
+        Serial.print(currentLed + 1);
+        Serial.print(" (");
+        Serial.print(colors[currentLed]);
+        Serial.println(") ON");
+        
+        delay(400); // LED menyala selama 400ms
+        
+        // Matikan LED
+        digitalWrite(led[currentLed], LOW);
+        delay(200); // Jeda antar LED
+    }
+    
+    // Jeda setelah animasi selesai
+    delay(800);
+    
+    Serial.println("✨ Animasi startup selesai! Permainan dimulai...");
 }
 
 void nextTurn() {
@@ -498,8 +603,11 @@ void nextTurn() {
     userTurn = true;
     userInput = 0;
     timer = millis();
+    levelStartTime = millis(); // Track waktu mulai level untuk response time
     
     Serial.println("👤 Giliran pemain untuk memasukkan urutan");
+    Serial.print("📊 Level start time: ");
+    Serial.println(levelStartTime);
 }
 
 void showSequence() {
@@ -553,6 +661,13 @@ void handleButtonPress(int buttonIndex) {
     Serial.print("Button pressed: ");
     Serial.println(colors[buttonIndex]);
     
+    // === TRACK RESPONSE TIME ===
+    unsigned long responseTime = millis() - levelStartTime;
+    
+    Serial.print("⏱️ Response time: ");
+    Serial.print(responseTime);
+    Serial.println("ms");
+    
     // Visual feedback
     digitalWrite(led[buttonIndex], HIGH);
     playTone(buttonIndex);
@@ -562,10 +677,32 @@ void handleButtonPress(int buttonIndex) {
     // Check if correct
     if (buttonIndex == sequence[userInput]) {
         Serial.println("✅ Correct!");
+        
+        // === SIMPAN DATA RESPONSE TIME ===
+        if (responseCount < 100) {
+            responseTimes[responseCount] = responseTime;
+            responseCount++;
+            totalResponseTime += responseTime;
+            
+            if (responseTime < fastestResponse) {
+                fastestResponse = responseTime;
+            }
+            if (responseTime > slowestResponse) {
+                slowestResponse = responseTime;
+            }
+            
+            Serial.print("📊 Fast/Slow: ");
+            Serial.print(fastestResponse);
+            Serial.print("/");
+            Serial.print(slowestResponse);
+            Serial.println("ms");
+        }
+        
         userInput++;
         
         // Reset timer untuk input berikutnya
         timer = millis();
+        levelStartTime = millis(); // Reset untuk input berikutnya
         
         // Check if sequence complete
         if (userInput >= seqL) {
@@ -582,15 +719,108 @@ void handleButtonPress(int buttonIndex) {
     }
 }
 
+//================================================================
+// PERHITUNGAN SKOR KOMPLEKS
+//================================================================
+
+ComplexScore calculateComplexScore() {
+    ComplexScore score;
+    
+    // 1. Base Score: Level yang dicapai
+    score.baseScore = turn - 1;
+    
+    // 2. Total Duration
+    score.totalDuration = totalGameDuration;
+    
+    // 3. Calculate average response time
+    if (responseCount > 0) {
+        score.avgResponseTime = totalResponseTime / responseCount;
+        score.fastestTime = fastestResponse;
+        score.slowestTime = slowestResponse;
+    } else {
+        score.avgResponseTime = 0;
+        score.fastestTime = 0;
+        score.slowestTime = 0;
+    }
+    
+    // 4. Time Bonus (0-500 points)
+    // Bonus berdasarkan durasi total - semakin cepat semakin bagus
+    if (score.totalDuration < 30000) {        // < 30 detik = bonus max
+        score.timeBonus = 500;
+    } else if (score.totalDuration < 60000) {  // 30-60 detik
+        score.timeBonus = 400 - ((score.totalDuration - 30000) / 1000) * 10;
+    } else if (score.totalDuration < 120000) { // 1-2 menit
+        score.timeBonus = 200 - ((score.totalDuration - 60000) / 1000) * 2;
+    } else {
+        score.timeBonus = 0;
+    }
+    
+    // 5. Accuracy Bonus (0-200 points)
+    // Bonus berdasarkan konsistensi response time
+    if (responseCount > 1) {
+        unsigned long variance = calculateResponseVariance();
+        if (variance < 500) {          // Sangat konsisten
+            score.accuracyBonus = 200;
+        } else if (variance < 1000) {  // Konsisten
+            score.accuracyBonus = 150;
+        } else if (variance < 2000) {  // Cukup konsisten
+            score.accuracyBonus = 100;
+        } else if (variance < 5000) {  // Kurang konsisten
+            score.accuracyBonus = 50;
+        } else {                       // Tidak konsisten
+            score.accuracyBonus = 0;
+        }
+    } else {
+        score.accuracyBonus = 0;
+    }
+    
+    // 6. Final Score Calculation
+    // Formula: (BaseScore × 1000) + TimeBonus + AccuracyBonus
+    score.finalScore = (score.baseScore * 1000) + score.timeBonus + score.accuracyBonus;
+    
+    return score;
+}
+
+unsigned long calculateResponseVariance() {
+    if (responseCount <= 1) return 0;
+    
+    unsigned long avgTime = totalResponseTime / responseCount;
+    unsigned long sumSquaredDiff = 0;
+    
+    for (int i = 0; i < responseCount; i++) {
+        long diff = (long)responseTimes[i] - (long)avgTime;
+        sumSquaredDiff += (diff * diff);
+    }
+    
+    return sumSquaredDiff / responseCount;
+}
+
 void loss() {
-    Serial.print("💀 Game Over! Final Score: ");
-    Serial.println(turn - 1);
+    // Hitung total durasi game
+    totalGameDuration = millis() - gameStartTime;
+    
+    // Hitung skor kompleks
+    ComplexScore finalScore = calculateComplexScore();
+    
+    Serial.println("💀 =============== GAME OVER ===============");
+    Serial.print("🎯 Base Score (Levels): ");
+    Serial.println(finalScore.baseScore);
+    Serial.print("⏱️ Game Duration: ");
+    Serial.print(finalScore.totalDuration);
+    Serial.println("ms");
+    Serial.print("🏃 Time Bonus: ");
+    Serial.println(finalScore.timeBonus);
+    Serial.print("🎯 Accuracy Bonus: ");
+    Serial.println(finalScore.accuracyBonus);
+    Serial.print("🏆 FINAL SCORE: ");
+    Serial.println(finalScore.finalScore);
+    Serial.println("==========================================");
     
     // Animasi kalah
     lossAnimation();
     
-    // Kirim skor ke server
-    submitScore(turn - 1);
+    // Kirim skor kompleks ke server
+    submitComplexScore(finalScore);
     
     // Reset game state
     gameInProgress = false;
@@ -638,11 +868,52 @@ void submitScore(int score) {
     String jsonBuffer;
     serializeJson(doc, jsonBuffer);
     
-    // Send event to server
-    sendWebSocketMessage("hardware:submit-score", jsonBuffer);
+    // Send event to server with correct message type
+    sendWebSocketMessage("score", jsonBuffer);
     
     Serial.print("Skor terkirim: ");
     Serial.println(jsonBuffer);
+}
+
+void submitComplexScore(ComplexScore complexScore) {
+    Serial.println("📤 Mengirim skor kompleks...");
+    
+    // Create comprehensive JSON payload
+    StaticJsonDocument<512> doc;
+    doc["score"] = complexScore.finalScore;           // Skor utama untuk kompatibilitas
+    doc["baseScore"] = complexScore.baseScore;
+    doc["totalDuration"] = complexScore.totalDuration;
+    doc["timeBonus"] = complexScore.timeBonus;
+    doc["accuracyBonus"] = complexScore.accuracyBonus;
+    doc["avgResponseTime"] = complexScore.avgResponseTime;
+    doc["fastestTime"] = complexScore.fastestTime;
+    doc["slowestTime"] = complexScore.slowestTime;
+    doc["responseCount"] = responseCount;
+    doc["isComplexScore"] = true;
+    doc["timestamp"] = millis();
+    
+    String jsonBuffer;
+    serializeJson(doc, jsonBuffer);
+    
+    // Send event to server
+    sendWebSocketMessage("score", jsonBuffer);
+    
+    Serial.println("📊 Complex Score Data:");
+    Serial.print("   Final Score: ");
+    Serial.println(complexScore.finalScore);
+    Serial.print("   Base/Time/Accuracy: ");
+    Serial.print(complexScore.baseScore);
+    Serial.print("/");
+    Serial.print(complexScore.timeBonus);
+    Serial.print("/");
+    Serial.println(complexScore.accuracyBonus);
+    Serial.print("   Duration: ");
+    Serial.print(complexScore.totalDuration);
+    Serial.println("ms");
+    Serial.print("   Avg Response: ");
+    Serial.print(complexScore.avgResponseTime);
+    Serial.println("ms");
+    Serial.println("✅ Complex score sent!");
 }
 
 //================================================================

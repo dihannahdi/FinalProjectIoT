@@ -1,59 +1,79 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simon Says IoT - Leaderboard & Game Control</title>
+    <title>Simon Says - IoT Game</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
+        <!-- Header Section -->
         <header class="header">
-            <h1>🎮 Simon Says IoT</h1>
-            <p>Kendalikan perangkat fisik dan lihat papan peringkat secara real-time!</p>
+            <h1>🎮 Simon Says</h1>
+            <p>Game Memori Interaktif dengan IoT</p>
         </header>
 
-        <!-- Game Control Section -->
-        <section class="game-control">
-            <div class="input-group">
-                <label for="playerNameInput">Nama Pemain:</label>
-                <input 
-                    type="text" 
-                    id="playerNameInput" 
-                    placeholder="Masukkan nama Anda..." 
-                    maxlength="20"
-                    autocomplete="off"
-                />
-            </div>
-            
-            <button id="startButton" class="start-btn">
-                🎯 Mulai Permainan
-            </button>
-            
-            <div id="statusMessage" class="status-message"></div>
-        </section>
-
-        <!-- Leaderboard Section -->
-        <section class="leaderboard-section">
-            <h2>🏆 Papan Peringkat</h2>
-            <div class="leaderboard-container">
-                <div id="leaderboard" class="leaderboard">
-                    <!-- Leaderboard will be populated here -->
+        <!-- Main Content Area - Side by side layout for web -->
+        <main class="main-content">
+            <!-- Game Control Panel -->
+            <section class="game-control">
+                <div class="input-group">
+                    <label for="playerNameInput">👤 Nama Pemain</label>
+                    <input 
+                        type="text" 
+                        id="playerNameInput" 
+                        placeholder="Masukkan nama Anda..." 
+                        maxlength="30"
+                        autocomplete="off"
+                    >
                 </div>
-            </div>
-        </section>
+                
+                <button id="startButton" type="button">
+                    🚀 Mulai Permainan
+                </button>
+                
+                <div id="status" class="status-message">
+                    <div id="connectionStatus" class="connection-status">🔄 Menghubungkan...</div>
+                </div>
+            </section>
 
-        <!-- Connection Status -->
-        <footer class="footer">
-            <div class="connection-status">
-                <span id="connectionStatus">🔌 Menghubungkan...</span>
+            <!-- Leaderboard Section -->
+            <section class="leaderboard" id="leaderboard">
+                <div class="empty-leaderboard">
+                    <div class="empty-icon">🏆</div>
+                    <h3>Memuat Leaderboard...</h3>
+                    <p>Mohon tunggu sebentar...</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Game Info Footer -->
+        <footer class="game-info">
+            <div class="info-grid">
+                <div class="info-card">
+                    <h4>🎯 Cara Bermain</h4>
+                    <p>Ikuti urutan LED yang menyala, lalu tekan tombol sesuai urutan tersebut.</p>
+                </div>
+                <div class="info-card">
+                    <h4>🏆 Sistem Skor</h4>
+                    <p>Skor dihitung berdasarkan level, kecepatan respon, dan akurasi Anda.</p>
+                </div>
+                <div class="info-card">
+                    <h4>⚡ Fitur IoT</h4>
+                    <p>Permainan menggunakan hardware ESP8266 dengan LED dan tombol fisik.</p>
+                </div>
             </div>
         </footer>
     </div>
 
     <!-- Socket.IO Client -->
     <script src="/socket.io/socket.io.js"></script>
+    
+    <!-- Game Script -->
     <script src="script.js"></script>
 </body>
 </html> 

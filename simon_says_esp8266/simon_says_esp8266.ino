@@ -5,6 +5,8 @@
 
 #include <ESP8266WiFi.h>
 #include <WebSocketsClient.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 #include <ArduinoJson.h>
 
 //================================================================
@@ -15,14 +17,18 @@
 const char* ssid = "Bapakmu Ijo";
 const char* password = "irengputeh";
 
-// Konfigurasi Server Azure - Multiple connection options
-const char* websocket_host = "simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
-const uint16_t websocket_port = 80;
-const char* websocket_path = "/socket.io/?EIO=4&transport=websocket";
+// Konfigurasi Server - Easy switch between local and Azure
+// Uncomment ONE of these configurations:
 
-// Alternative connection settings (for troubleshooting)
-// const char* websocket_path = "/socket.io/?transport=websocket"; // Without EIO version
-// const uint16_t websocket_port = 443; // For HTTPS if needed
+// === LOCAL TESTING ===
+const char* websocket_host = "192.168.1.6";  // Your computer's IP address
+const uint16_t websocket_port = 3000;  // Same port as main server
+const char* websocket_path = "/hardware-ws";  // Hardware WebSocket path
+
+// === AZURE DEPLOYMENT === 
+// const char* websocket_host = "simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
+// const uint16_t websocket_port = 80;  // Standard HTTP port
+// const char* websocket_path = "/hardware-ws";  // Hardware WebSocket path
 
 // Definisi Pin
 int led[] = {D5, D6, D7, D8};  // LED untuk Red, Green, Blue, Yellow
@@ -216,8 +222,8 @@ void checkWiFiConnection() {
 }
 
 void monitorConnection() {
-    // Check connection status every 30 seconds
-    if (millis() - lastConnectionAttempt > 30000) {
+    // Check connection status every 10 seconds for faster recovery
+    if (millis() - lastConnectionAttempt > 10000) {
         if (!isConnected && wifiConnected) {
             connectionAttempts++;
             Serial.print("🔄 Connection attempt #");
@@ -285,7 +291,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             lastPingTime = millis();
             
             // Send connection message
-            sendWebSocketMessage("hardware:connected", "{}");
+            sendWebSocketMessage("connected", "{}");
             Serial.println("📤 Hardware connection notification sent");
             break;
             
@@ -322,44 +328,62 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 void handleWebSocketMessage(String message) {
     Serial.println("📨 Pesan diterima: " + message);
     
-    // Parse Socket.IO message format
-    if (message.startsWith("42")) {
-        // Remove Socket.IO prefix
-        String jsonStr = message.substring(2);
+    // Parse simple JSON message format (not Socket.IO)
+    StaticJsonDocument<512> doc;
+    DeserializationError error = deserializeJson(doc, message);
+    
+    if (error) {
+        Serial.print("⚠️ JSON parse error: ");
+        Serial.println(error.c_str());
+        return;
+    }
+    
+    // Check message type
+    if (doc.containsKey("type")) {
+        String messageType = doc["type"].as<String>();
         
-        StaticJsonDocument<512> doc;
-        DeserializationError error = deserializeJson(doc, jsonStr);
+        Serial.print("🎯 Message type: ");
+        Serial.println(messageType);
         
-        if (error) {
-            Serial.print("⚠️ JSON parse error: ");
-            Serial.println(error.c_str());
-            return;
-        }
-        
-        if (doc.is<JsonArray>()) {
-            JsonArray arr = doc.as<JsonArray>();
-            if (arr.size() >= 1) {
-                String eventName = arr[0].as<String>();
-                
-                Serial.print("🎯 Event received: ");
-                Serial.println(eventName);
-                
-                if (eventName == "server:trigger-game") {
-                    triggerGameHandler();
-                }
-            }
+        if (messageType == "connected") {
+            Serial.println("✅ Hardware connected to server!");
+            // Send confirmation back
+            sendWebSocketMessage("ready", "{}");
+            
+        } else if (messageType == "trigger-game") {
+            triggerGameHandler();
+            
+        } else {
+            Serial.println("⚠️ Unknown message type: " + messageType);
         }
     }
 }
 
-void sendWebSocketMessage(String eventName, String data) {
+void sendWebSocketMessage(String messageType, String data) {
     if (!isConnected) {
         Serial.println("⚠️ WebSocket not connected, cannot send message");
         return;
     }
     
-    // Socket.IO format: 42["event_name", data]
-    String message = "42[\"" + eventName + "\"," + data + "]";
+    // Create simple JSON message
+    StaticJsonDocument<256> doc;
+    doc["type"] = messageType;
+    
+    // Parse data if it's JSON, otherwise use as string
+    if (data.startsWith("{")) {
+        StaticJsonDocument<128> dataDoc;
+        if (deserializeJson(dataDoc, data) == DeserializationError::Ok) {
+            doc["data"] = dataDoc;
+        } else {
+            doc["data"] = data;
+        }
+    } else {
+        doc["data"] = data;
+    }
+    
+    String message;
+    serializeJson(doc, message);
+    
     bool success = webSocket.sendTXT(message);
     
     if (success) {
@@ -434,15 +458,15 @@ void testConnection() {
 }
 
 void tryAlternativeConnection() {
-    Serial.println("🔄 Trying alternative connection method...");
+    Serial.println("🔄 Trying to reconnect WebSocket...");
     
     // Disconnect current WebSocket
     webSocket.disconnect();
-    delay(1000);
+    delay(2000);
     
-    // Try without EIO version parameter
-    Serial.println("Attempting connection without EIO version...");
-    webSocket.begin(websocket_host, websocket_port, "/socket.io/?transport=websocket");
+    // Reconnect with same settings
+    Serial.println("Attempting reconnection...");
+    webSocket.begin(websocket_host, websocket_port, websocket_path);
     webSocket.onEvent(webSocketEvent);
     webSocket.enableHeartbeat(15000, 3000, 2);
     webSocket.setReconnectInterval(5000);
@@ -450,15 +474,10 @@ void tryAlternativeConnection() {
     delay(5000); // Wait for connection attempt
     
     if (!isConnected) {
-        Serial.println("Alternative method 1 failed, trying method 2...");
-        webSocket.disconnect();
-        delay(1000);
-        
-        // Try basic WebSocket path
-        webSocket.begin(websocket_host, websocket_port, "/socket.io/");
-        webSocket.onEvent(webSocketEvent);
-        webSocket.enableHeartbeat(15000, 3000, 2);
-        webSocket.setReconnectInterval(5000);
+        Serial.println("❌ Reconnection failed");
+        Serial.println("🔧 Check server status and network connectivity");
+    } else {
+        Serial.println("✅ Reconnection successful!");
     }
 }
 
@@ -638,8 +657,8 @@ void submitScore(int score) {
     String jsonBuffer;
     serializeJson(doc, jsonBuffer);
     
-    // Send event to server
-    sendWebSocketMessage("hardware:submit-score", jsonBuffer);
+    // Send event to server with correct message type
+    sendWebSocketMessage("score", jsonBuffer);
     
     Serial.print("Skor terkirim: ");
     Serial.println(jsonBuffer);

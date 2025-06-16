@@ -1,1 +1,72 @@
-[] 
+[
+  {
+    "name": "dihan",
+    "score": 6000,
+    "timestamp": "2025-06-16T17:58:46.740Z",
+    "isComplexScore": true,
+    "baseScore": 6,
+    "totalDuration": 45000,
+    "timeBonus": 300,
+    "accuracyBonus": 150,
+    "avgResponseTime": 750,
+    "fastestTime": 450,
+    "slowestTime": 1200,
+    "responseCount": 12
+  },
+  {
+    "name": "nahdi",
+    "score": 3250,
+    "timestamp": "2025-06-16T17:45:26.241Z",
+    "isComplexScore": true,
+    "baseScore": 3,
+    "totalDuration": 38000,
+    "timeBonus": 200,
+    "accuracyBonus": 50,
+    "avgResponseTime": 890,
+    "fastestTime": 520,
+    "slowestTime": 1450,
+    "responseCount": 8
+  },
+  {
+    "name": "nahdihanih",
+    "score": 2000,
+    "timestamp": "2025-06-16T18:00:40.392Z",
+    "isComplexScore": false,
+    "baseScore": 2,
+    "totalDuration": 0,
+    "timeBonus": 0,
+    "accuracyBonus": 0,
+    "avgResponseTime": 0,
+    "fastestTime": 0,
+    "slowestTime": 0,
+    "responseCount": 0
+  },
+  {
+    "name": "alex_pro",
+    "score": 8470,
+    "timestamp": "2025-06-16T18:15:20.123Z",
+    "isComplexScore": true,
+    "baseScore": 8,
+    "totalDuration": 28000,
+    "timeBonus": 420,
+    "accuracyBonus": 50,
+    "avgResponseTime": 650,
+    "fastestTime": 380,
+    "slowestTime": 950,
+    "responseCount": 16
+  },
+  {
+    "name": "sarah_quick",
+    "score": 5380,
+    "timestamp": "2025-06-16T18:20:45.456Z",
+    "isComplexScore": true,
+    "baseScore": 5,
+    "totalDuration": 55000,
+    "timeBonus": 180,
+    "accuracyBonus": 200,
+    "avgResponseTime": 520,
+    "fastestTime": 320,
+    "slowestTime": 780,
+    "responseCount": 10
+  }
+]

@@ -6,11 +6,42 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch: # Manual deployment trigger
 
+env:
+  NODE_VERSION: '18.x'
+  AZURE_WEBAPP_PACKAGE_PATH: '.'
+
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: 'Checkout Code'
+      uses: actions/checkout@v4
+
+    - name: 'Set up Node.js'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: 'Install Dependencies'
+      run: npm ci
+
+    - name: 'Run Security Audit'
+      run: npm audit --audit-level=moderate
+
+    - name: 'Run Tests'
+      run: npm test
+
   build-and-deploy:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
 
     steps:
     - name: 'Checkout Code'
@@ -19,7 +50,7 @@ jobs:
     - name: 'Set up Node.js'
       uses: actions/setup-node@v4
       with:
-        node-version: '22.x'
+        node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
     - name: 'Install Dependencies'
@@ -27,11 +58,23 @@ jobs:
         npm ci --only=production
         npm prune --production
 
-    - name: 'Create required directories'
+    - name: 'Security Audit'
+      run: npm audit --audit-level=high --production
+
+    - name: 'Create Required Directories'
       run: |
-        mkdir -p data
-        mkdir -p logs
+        mkdir -p data logs
         echo '[]' > data/leaderboard.json
+        touch logs/.gitkeep
+
+    - name: 'Optimize Build'
+      run: |
+        # Remove unnecessary files
+        rm -rf .git .github *.md
+        # Optimize node_modules
+        find node_modules -name "*.map" -delete
+        find node_modules -name "*.md" -delete
+        find node_modules -name "test" -type d -exec rm -rf {} + 2>/dev/null || true
 
     - name: 'Login to Azure'
       uses: azure/login@v2
@@ -41,9 +84,14 @@ jobs:
     - name: 'Deploy to Azure Web App'
       uses: azure/webapps-deploy@v3
       with:
-        app-name: ${{ secrets.AZURE_APP_NAME || 'simon-says' }}
-        package: '.'
+        app-name: ${{ secrets.AZURE_APP_NAME || 'simon-says-iot' }}
+        package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
 
-    - name: 'Azure logout'
+    - name: 'Health Check'
       run: |
-        az logout 
+        sleep 30  # Wait for deployment
+        curl -f https://${{ secrets.AZURE_APP_NAME || 'simon-says-iot' }}.azurewebsites.net/health || exit 1
+
+    - name: 'Azure Logout'
+      run: az logout
+      if: always() 

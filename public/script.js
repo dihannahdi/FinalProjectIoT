@@ -1,5 +1,15 @@
-// Initialize Socket.IO connection
-const socket = io();
+// Initialize Socket.IO connection with specific configuration
+const socket = io({
+    transports: ['polling'],  // Use only polling to avoid WebSocket conflicts
+    upgrade: false,  // Disable automatic upgrade
+    rememberUpgrade: false,
+    timeout: 20000,
+    forceNew: true,
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    maxReconnectionAttempts: 5
+});
 
 // DOM Elements
 const playerNameInput = document.getElementById('playerNameInput');
@@ -34,6 +44,8 @@ function setupEventListeners() {
 // Socket.IO Event Handlers
 function handleConnect() {
     console.log('Connected to server');
+    console.log('Socket ID:', socket.id);
+    console.log('Transport:', socket.io.engine.transport.name);
     isConnected = true;
     updateConnectionStatus(true);
     fetchInitialLeaderboard();
@@ -79,8 +91,17 @@ function handleStartGame() {
         return;
     }
     
-    if (playerName.length < 2) {
-        showStatusMessage('⚠️ Nama pemain minimal 2 karakter!', 'error');
+    // More flexible validation: allow 1-30 characters, support spaces, numbers, basic symbols
+    if (playerName.length > 30) {
+        showStatusMessage('⚠️ Nama pemain maksimal 30 karakter!', 'error');
+        playerNameInput.focus();
+        return;
+    }
+    
+    // Allow letters, numbers, spaces, and common symbols
+    const validNamePattern = /^[a-zA-Z0-9\s\-_.]+$/;
+    if (!validNamePattern.test(playerName)) {
+        showStatusMessage('⚠️ Nama hanya boleh berisi huruf, angka, spasi, dan simbol (-_.)', 'error');
         playerNameInput.focus();
         return;
     }
@@ -92,7 +113,7 @@ function handleStartGame() {
     // Send start game event
     socket.emit('frontend:start-game', { name: playerName });
     
-    showStatusMessage('🎮 Permainan sedang berlangsung di perangkat fisik... Tunggu giliranmu!', 'active');
+    showStatusMessage('🎊 Memulai animasi startup... Skor akan dihitung berdasarkan level, kecepatan, dan akurasi!', 'active');
     
     console.log(`Starting game for player: ${playerName}`);
 }
@@ -108,15 +129,23 @@ function handleNameInput(event) {
     
     // Enable/disable start button based on input
     const playerName = event.target.value.trim();
-    startButton.disabled = gameInProgress || !playerName || !isConnected;
+    const isValidLength = playerName.length >= 1 && playerName.length <= 30;
+    startButton.disabled = gameInProgress || !playerName || !isConnected || !isValidLength;
 }
 
 // Leaderboard Functions
 async function fetchInitialLeaderboard() {
     try {
         const response = await fetch('/api/leaderboard');
-        const data = await response.json();
-        renderLeaderboard(data);
+        const result = await response.json();
+        
+        // Handle successful response
+        if (result.success && result.data) {
+            renderLeaderboard(result.data);
+        } else {
+            console.warn('Leaderboard API returned unsuccessful response:', result);
+            showEmptyLeaderboard();
+        }
     } catch (error) {
         console.error('Error fetching initial leaderboard:', error);
         showEmptyLeaderboard();
@@ -124,44 +153,138 @@ async function fetchInitialLeaderboard() {
 }
 
 function renderLeaderboard(data) {
-    if (!data || data.length === 0) {
+    // Ensure data is an array
+    if (!Array.isArray(data) || data.length === 0) {
         showEmptyLeaderboard();
         return;
     }
     
-    // Create table HTML
+    console.log('🔍 Debug: Leaderboard data received:', data);
+    
+    // Create table HTML with enhanced columns for complex scoring
     let tableHTML = `
-        <table class="leaderboard-table">
-            <thead>
-                <tr>
-                    <th>Peringkat</th>
-                    <th>Nama</th>
-                    <th>Skor</th>
-                    <th>Waktu</th>
-                </tr>
-            </thead>
-            <tbody>
+        <div class="leaderboard-header">
+            <h3>🏆 Papan Peringkat</h3>
+            <div class="score-legend">
+                <span class="legend-item"><span class="badge complex">🎯</span> Skor Kompleks</span>
+                <span class="legend-item"><span class="badge simple">⚪</span> Skor Sederhana</span>
+            </div>
+        </div>
+        <div class="table-container">
+            <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th class="rank-col">Peringkat</th>
+                        <th class="name-col">Pemain</th>
+                        <th class="score-col">Final Score</th>
+                        <th class="level-col">Level</th>
+                        <th class="bonus-col">Bonus</th>
+                        <th class="duration-col">Durasi</th>
+                        <th class="response-col">Avg Response</th>
+                        <th class="time-col">Waktu</th>
+                    </tr>
+                </thead>
+                <tbody>
     `;
     
     data.forEach((entry, index) => {
         const rank = index + 1;
         const rankClass = getRankClass(rank);
         const rankIcon = getRankIcon(rank);
+        const rankMedal = getRankMedal(rank);
         const formattedDate = formatTimestamp(entry.timestamp);
         
+        // Debug log each entry
+        console.log(`📊 Entry ${rank}:`, {
+            name: entry.name,
+            score: entry.score,
+            isComplexScore: entry.isComplexScore,
+            baseScore: entry.baseScore,
+            timeBonus: entry.timeBonus,
+            accuracyBonus: entry.accuracyBonus,
+            totalDuration: entry.totalDuration,
+            avgResponseTime: entry.avgResponseTime
+        });
+        
+        // Format complex scoring data with better fallbacks
+        const isComplex = entry.isComplexScore === true;
+        const baseScore = entry.baseScore || entry.score || 0;
+        const timeBonus = entry.timeBonus || 0;
+        const accuracyBonus = entry.accuracyBonus || 0;
+        const totalBonus = timeBonus + accuracyBonus;
+        
+        // Better handling of duration and response time
+        const duration = (entry.totalDuration && entry.totalDuration > 0) ? 
+            formatDuration(entry.totalDuration) : 
+            (isComplex ? 'N/A' : '-');
+            
+        const avgResponse = (entry.avgResponseTime && entry.avgResponseTime > 0) ? 
+            `${entry.avgResponseTime}ms` : 
+            (isComplex ? 'N/A' : '-');
+        
+        // Add complexity indicator with better styling
+        const complexityBadge = isComplex ? 
+            '<span class="complexity-badge complex" title="Sistem Skor Kompleks">🎯</span>' : 
+            '<span class="complexity-badge simple" title="Skor Sederhana">⚪</span>';
+        
+        // Better bonus display
+        const bonusDisplay = isComplex ? 
+            (totalBonus > 0 ? `+${totalBonus}` : '0') : 
+            '-';
+        
+        const bonusTooltip = isComplex ? 
+            `Time Bonus: +${timeBonus}, Accuracy Bonus: +${accuracyBonus}` : 
+            'Skor sederhana tidak memiliki bonus';
+        
         tableHTML += `
-            <tr>
-                <td class="rank ${rankClass}">${rankIcon} ${rank}</td>
-                <td class="name">${escapeHtml(entry.name)}</td>
-                <td class="score">${entry.score}</td>
-                <td class="timestamp">${formattedDate}</td>
+            <tr class="${isComplex ? 'complex-score' : 'simple-score'} rank-${rank}">
+                <td class="rank ${rankClass}">
+                    <div class="rank-content">
+                        <span class="rank-icon">${rankIcon}</span>
+                        <span class="rank-number">${rank}</span>
+                        <span class="rank-medal">${rankMedal}</span>
+                    </div>
+                </td>
+                <td class="name">
+                    <div class="player-info">
+                        <span class="player-name">${escapeHtml(entry.name)}</span>
+                        ${complexityBadge}
+                    </div>
+                </td>
+                <td class="score final-score">
+                    <div class="score-display">
+                        <strong>${entry.score.toLocaleString()}</strong>
+                    </div>
+                </td>
+                <td class="base-score">
+                    <span class="level-badge">${baseScore}</span>
+                </td>
+                <td class="bonus" title="${bonusTooltip}">
+                    <span class="bonus-value ${totalBonus > 0 ? 'has-bonus' : 'no-bonus'}">${bonusDisplay}</span>
+                </td>
+                <td class="duration">
+                    <span class="duration-value">${duration}</span>
+                </td>
+                <td class="response-time">
+                    <span class="response-value">${avgResponse}</span>
+                </td>
+                <td class="timestamp">
+                    <span class="time-value">${formattedDate}</span>
+                </td>
             </tr>
         `;
     });
     
     tableHTML += `
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        </div>
+        <div class="leaderboard-footer">
+            <div class="stats-info">
+                <span class="total-players">Total Pemain: ${data.length}</span>
+                <span class="complex-count">Skor Kompleks: ${data.filter(e => e.isComplexScore).length}</span>
+            </div>
+        </div>
     `;
     
     leaderboard.innerHTML = tableHTML;
@@ -170,49 +293,60 @@ function renderLeaderboard(data) {
 function showEmptyLeaderboard() {
     leaderboard.innerHTML = `
         <div class="empty-leaderboard">
-            🎯 Belum ada permainan yang dimainkan.<br>
-            Jadilah yang pertama untuk memulai!
+            <div class="empty-icon">🏆</div>
+            <h3>Belum Ada Skor</h3>
+            <p>Jadilah yang pertama bermain Simon Says!</p>
         </div>
     `;
 }
 
 // Helper Functions
 function getRankClass(rank) {
-    switch (rank) {
-        case 1: return 'gold';
-        case 2: return 'silver';
-        case 3: return 'bronze';
-        default: return '';
-    }
+    if (rank === 1) return 'gold';
+    if (rank === 2) return 'silver';
+    if (rank === 3) return 'bronze';
+    return '';
 }
 
 function getRankIcon(rank) {
-    switch (rank) {
-        case 1: return '🥇';
-        case 2: return '🥈';
-        case 3: return '🥉';
-        default: return '#';
-    }
+    if (rank === 1) return '👑';
+    if (rank === 2) return '🥈';
+    if (rank === 3) return '🥉';
+    if (rank <= 5) return '⭐';
+    if (rank <= 10) return '🏅';
+    return '🎯';
+}
+
+function getRankMedal(rank) {
+    if (rank === 1) return 'JUARA';
+    if (rank === 2) return 'RUNNER UP';
+    if (rank === 3) return 'THIRD PLACE';
+    if (rank <= 5) return 'TOP 5';
+    if (rank <= 10) return 'TOP 10';
+    return '';
 }
 
 function formatTimestamp(timestamp) {
     const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    
-    if (diffMins < 1) return 'Baru saja';
-    if (diffMins < 60) return `${diffMins} menit lalu`;
-    if (diffHours < 24) return `${diffHours} jam lalu`;
-    if (diffDays < 7) return `${diffDays} hari lalu`;
-    
-    return date.toLocaleDateString('id-ID', {
-        day: 'numeric',
+    return date.toLocaleString('id-ID', {
+        year: 'numeric',
         month: 'short',
-        year: 'numeric'
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
     });
+}
+
+function formatDuration(milliseconds) {
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    
+    if (minutes > 0) {
+        return `${minutes}m ${remainingSeconds}s`;
+    } else {
+        return `${remainingSeconds}s`;
+    }
 }
 
 function escapeHtml(text) {
@@ -246,6 +380,20 @@ function clearStatusMessage() {
     statusMessage.className = 'status-message';
     statusMessage.style.display = 'none';
 }
+
+// Add additional Socket.IO event listeners for debugging
+socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    showStatusMessage('❌ Gagal terhubung ke server!', 'error');
+});
+
+socket.on('disconnect', (reason) => {
+    console.log('Disconnect reason:', reason);
+});
+
+socket.io.on('error', (error) => {
+    console.error('Socket.IO error:', error);
+});
 
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', init); 

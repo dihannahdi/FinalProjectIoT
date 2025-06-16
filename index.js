@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const WebSocket = require('ws');
 const fs = require('fs').promises;
 const path = require('path');
 const cors = require('cors');
@@ -21,7 +22,37 @@ const {
 // Initialize Express app and HTTP server
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+
+// Configure Socket.IO with proper CORS and options
+const io = socketIo(server, {
+    cors: {
+        origin: process.env.ALLOWED_ORIGINS?.split(',') || "*",
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    allowEIO3: true,  // Allow Engine.IO v3 compatibility
+    transports: ['polling'],  // Use only polling to avoid conflicts with hardware WebSocket
+    pingTimeout: 60000,  // 60 seconds
+    pingInterval: 25000,  // 25 seconds
+    allowUpgrades: false  // Disable WebSocket upgrade to prevent conflicts
+});
+
+// Create a WebSocket server that shares the same HTTP server (Azure compatible)
+const wsServer = new WebSocket.Server({ 
+    server: server,  // Use same server instead of separate port
+    path: '/hardware-ws',  // Specific path for hardware WebSocket
+    verifyClient: (info) => {
+        logger.info('Hardware WebSocket connection attempt', {
+            origin: info.origin,
+            userAgent: info.req.headers['user-agent'],
+            path: info.req.url,
+            type: 'hardware_connection_attempt'
+        });
+        // Only allow connections to the exact hardware WebSocket path
+        return info.req.url === '/hardware-ws' && info.req.headers['user-agent']?.includes('arduino');
+    },
+    perMessageDeflate: false  // Disable compression for better hardware compatibility
+});
 
 // Rate limiting
 const limiter = rateLimit({
@@ -77,8 +108,31 @@ app.get('/api/leaderboard', async (req, res) => {
         const data = await fs.readFile('data/leaderboard.json', 'utf8');
         let leaderboard = JSON.parse(data || '[]');
         
-        // Sort by score (highest to lowest)
-        leaderboard.sort((a, b) => b.score - a.score);
+        // Sort by complex criteria
+        leaderboard.sort((a, b) => {
+            // Primary: Final score (highest first)
+            if (b.score !== a.score) {
+                return b.score - a.score;
+            }
+            
+            // Secondary: Total duration (fastest first) 
+            if (a.totalDuration !== b.totalDuration) {
+                return a.totalDuration - b.totalDuration;
+            }
+            
+            // Tertiary: Average response time (fastest first)
+            if (a.avgResponseTime !== b.avgResponseTime) {
+                return a.avgResponseTime - b.avgResponseTime;
+            }
+            
+            // Quaternary: Time bonus (highest first)
+            if (b.timeBonus !== a.timeBonus) {
+                return b.timeBonus - a.timeBonus;
+            }
+            
+            // Final: Accuracy bonus (highest first)
+            return b.accuracyBonus - a.accuracyBonus;
+        });
         
         timer.end();
         logger.info('Leaderboard fetched successfully', {
@@ -115,7 +169,7 @@ io.on('connection', (socket) => {
     });
 
     // Event: frontend:start-game
-    socket.on('frontend:start-game', monitorWebSocketEvent('frontend:start-game', (socket, payload) => {
+    socket.on('frontend:start-game', (payload) => {
         if (payload && payload.name) {
             lastPlayerName = payload.name;
             
@@ -125,6 +179,7 @@ io.on('connection', (socket) => {
             logger.info('Game start requested', {
                 playerName: lastPlayerName,
                 socketId: socket.id,
+                message: 'Starting game with LED startup animation (1-2-3-4-3-2-1)',
                 type: 'game_start_request'
             });
             
@@ -140,10 +195,10 @@ io.on('connection', (socket) => {
                 type: 'invalid_payload'
             });
         }
-    }));
+    });
 
     // Event: hardware:submit-score
-    socket.on('hardware:submit-score', monitorWebSocketEvent('hardware:submit-score', async (socket, payload) => {
+    socket.on('hardware:submit-score', async (payload) => {
         const timer = logger.performance.start('score_submission');
         
         if (payload && typeof payload.score === 'number' && lastPlayerName) {
@@ -164,7 +219,17 @@ io.on('connection', (socket) => {
                 const newEntry = {
                     name: lastPlayerName,
                     score: payload.score,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    // Complex scoring data
+                    isComplexScore: payload.isComplexScore || false,
+                    baseScore: payload.baseScore || payload.score,
+                    totalDuration: payload.totalDuration || 0,
+                    timeBonus: payload.timeBonus || 0,
+                    accuracyBonus: payload.accuracyBonus || 0,
+                    avgResponseTime: payload.avgResponseTime || 0,
+                    fastestTime: payload.fastestTime || 0,
+                    slowestTime: payload.slowestTime || 0,
+                    responseCount: payload.responseCount || 0
                 };
 
                 // Read current leaderboard
@@ -174,8 +239,31 @@ io.on('connection', (socket) => {
                 // Add new entry
                 leaderboard.push(newEntry);
                 
-                // Sort by score (highest to lowest)
-                leaderboard.sort((a, b) => b.score - a.score);
+                // Sort by complex criteria
+                leaderboard.sort((a, b) => {
+                    // Primary: Final score (highest first)
+                    if (b.score !== a.score) {
+                        return b.score - a.score;
+                    }
+                    
+                    // Secondary: Total duration (fastest first) 
+                    if (a.totalDuration !== b.totalDuration) {
+                        return a.totalDuration - b.totalDuration;
+                    }
+                    
+                    // Tertiary: Average response time (fastest first)
+                    if (a.avgResponseTime !== b.avgResponseTime) {
+                        return a.avgResponseTime - b.avgResponseTime;
+                    }
+                    
+                    // Quaternary: Time bonus (highest first)
+                    if (b.timeBonus !== a.timeBonus) {
+                        return b.timeBonus - a.timeBonus;
+                    }
+                    
+                    // Final: Accuracy bonus (highest first)
+                    return b.accuracyBonus - a.accuracyBonus;
+                });
                 
                 // Write back to file
                 await fs.writeFile('data/leaderboard.json', JSON.stringify(leaderboard, null, 2));
@@ -222,7 +310,7 @@ io.on('connection', (socket) => {
                 type: 'invalid_score_submission'
             });
         }
-    }));
+    });
 
     // Event: disconnect
     socket.on('disconnect', (reason) => {
@@ -240,6 +328,183 @@ io.on('connection', (socket) => {
                 type: 'player_disconnect_during_game'
             });
             lastPlayerName = '';
+        }
+    });
+});
+
+// Hardware WebSocket Server (separate from Socket.IO)
+let hardwareConnected = false;
+let hardwareWs = null;
+
+wsServer.on('connection', (ws, req) => {
+    hardwareConnected = true;
+    hardwareWs = ws;
+    
+    logger.info('Hardware WebSocket connected', {
+        userAgent: req.headers['user-agent'],
+        ip: req.socket.remoteAddress,
+        type: 'hardware_websocket_connected'
+    });
+    
+    // Send welcome message to hardware
+    ws.send(JSON.stringify({
+        type: 'connected',
+        message: 'Hardware connected successfully'
+    }));
+    
+    // Listen for messages from hardware
+    ws.on('message', async (data) => {
+        try {
+            const message = JSON.parse(data.toString());
+            
+            logger.info('Hardware message received', {
+                messageType: message.type,
+                data: message.data,
+                type: 'hardware_message'
+            });
+            
+            if (message.type === 'score') {
+                // Process score submission like Socket.IO handler
+                if (message.data && typeof message.data.score === 'number' && lastPlayerName) {
+                    try {
+                        logger.info('Hardware score submission received', {
+                            playerName: lastPlayerName,
+                            score: message.data.score,
+                            type: 'hardware_score_submission'
+                        });
+                        
+                        // Create new entry
+                        const newEntry = {
+                            name: lastPlayerName,
+                            score: message.data.score,
+                            timestamp: new Date().toISOString(),
+                            // Complex scoring data
+                            isComplexScore: message.data.isComplexScore || false,
+                            baseScore: message.data.baseScore || message.data.score,
+                            totalDuration: message.data.totalDuration || 0,
+                            timeBonus: message.data.timeBonus || 0,
+                            accuracyBonus: message.data.accuracyBonus || 0,
+                            avgResponseTime: message.data.avgResponseTime || 0,
+                            fastestTime: message.data.fastestTime || 0,
+                            slowestTime: message.data.slowestTime || 0,
+                            responseCount: message.data.responseCount || 0
+                        };
+
+                        // Read current leaderboard
+                        const data = await fs.readFile('data/leaderboard.json', 'utf8');
+                        let leaderboard = JSON.parse(data || '[]');
+                        
+                        // Add new entry
+                        leaderboard.push(newEntry);
+                        
+                        // Sort by complex criteria
+                        leaderboard.sort((a, b) => {
+                            // Primary: Final score (highest first)
+                            if (b.score !== a.score) {
+                                return b.score - a.score;
+                            }
+                            
+                            // Secondary: Total duration (fastest first) 
+                            if (a.totalDuration !== b.totalDuration) {
+                                return a.totalDuration - b.totalDuration;
+                            }
+                            
+                            // Tertiary: Average response time (fastest first)
+                            if (a.avgResponseTime !== b.avgResponseTime) {
+                                return a.avgResponseTime - b.avgResponseTime;
+                            }
+                            
+                            // Quaternary: Time bonus (highest first)
+                            if (b.timeBonus !== a.timeBonus) {
+                                return b.timeBonus - a.timeBonus;
+                            }
+                            
+                            // Final: Accuracy bonus (highest first)
+                            return b.accuracyBonus - a.accuracyBonus;
+                        });
+                        
+                        // Write back to file
+                        await fs.writeFile('data/leaderboard.json', JSON.stringify(leaderboard, null, 2));
+                        
+                        // Broadcast updated leaderboard to all web clients
+                        io.emit('server:leaderboard-update', leaderboard);
+                        
+                        logger.info('Hardware score processed successfully', {
+                            playerName: lastPlayerName,
+                            score: message.data.score,
+                            leaderboardPosition: leaderboard.findIndex(entry => entry.name === lastPlayerName && entry.score === message.data.score) + 1,
+                            totalEntries: leaderboard.length,
+                            type: 'hardware_score_processed'
+                        });
+                        
+                        // Reset player name
+                        lastPlayerName = '';
+                        
+                    } catch (error) {
+                        logger.trackError(error, {
+                            context: 'hardware_score_submission',
+                            playerName: lastPlayerName,
+                            messageData: message.data
+                        });
+                    }
+                } else {
+                    logger.warn('Invalid hardware score submission', {
+                        messageData: message.data,
+                        lastPlayerName,
+                        type: 'invalid_hardware_score_submission'
+                    });
+                }
+            }
+            
+        } catch (error) {
+            logger.error('Error parsing hardware message', {
+                error: error.message,
+                data: data.toString(),
+                type: 'hardware_message_error'
+            });
+        }
+    });
+    
+    // Handle WebSocket errors
+    ws.on('error', (error) => {
+        logger.error('Hardware WebSocket error', {
+            error: error.message,
+            type: 'hardware_websocket_error'
+        });
+    });
+    
+    // Handle WebSocket close
+    ws.on('close', (code, reason) => {
+        hardwareConnected = false;
+        hardwareWs = null;
+        
+        logger.info('Hardware WebSocket disconnected', {
+            code,
+            reason: reason ? reason.toString() : 'No reason provided',
+            type: 'hardware_websocket_disconnected'
+        });
+    });
+});
+
+// Listen for game triggers from frontend and forward to hardware
+io.on('connection', (socket) => {
+    socket.on('frontend:start-game', (payload) => {
+        if (hardwareConnected && hardwareWs) {
+            hardwareWs.send(JSON.stringify({
+                type: 'trigger-game',
+                data: {
+                    ...payload,
+                    startupAnimation: true,
+                    animationPattern: '1-2-3-4-3-2-1'
+                }
+            }));
+            
+            logger.info('Game trigger sent to hardware', {
+                playerName: payload.name,
+                startupAnimation: true,
+                animationPattern: '1-2-3-4-3-2-1',
+                type: 'game_trigger_forwarded'
+            });
         }
     });
 });

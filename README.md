@@ -1154,3 +1154,121 @@ What you expected to happen.
 ---
 
 **Dibuat dengan ❤️ untuk pembelajaran IoT dan Real-time Systems** 
+
+az ad sp create-for-rbac --name "simon-says-deploy" \  --role contributor \  --scopes /subscriptions/{subscription-id} \  --sdk-auth
+
+## 🎊 Fitur Animasi Startup Baru!
+
+Sekarang ketika pemain memulai permainan dengan memasukkan nama, sistem akan menjalankan **animasi startup LED** dengan pola:
+
+**1 → 2 → 3 → 4 → 3 → 2 → 1**
+
+### Detail Animasi:
+- 🔴 **LED 1** (RED) menyala → 🔇 mati
+- 🟢 **LED 2** (GREEN) menyala → 🔇 mati  
+- 🔵 **LED 3** (BLUE) menyala → 🔇 mati
+- 🟡 **LED 4** (YELLOW) menyala → 🔇 mati
+- 🔵 **LED 3** (BLUE) menyala → 🔇 mati
+- 🟢 **LED 2** (GREEN) menyala → 🔇 mati
+- 🔴 **LED 1** (RED) menyala → 🔇 mati
+
+### Timing:
+- Setiap LED menyala selama **400ms** 
+- Jeda antar LED: **200ms**
+- Setiap LED disertai dengan **nada musik** yang berbeda
+- Total durasi animasi: **~4.2 detik**
+
+### Implementasi:
+- **ESP8266**: Fungsi `startupAnimation()` di `simon_says_esp8266.ino`
+- **Server**: Log informatif tentang animasi startup
+- **Web Client**: Pesan "🎊 Memulai animasi startup... LED akan berjalan dengan pola 1-2-3-4-3-2-1!"
+
+---
+
+## 🎯 **SISTEM SKOR KOMPLEKS**
+
+Sistem scoring telah ditingkatkan menjadi lebih sophistikasi dengan multiple faktor untuk memberikan ranking yang lebih adil dan akurat!
+
+### **📊 Formula Skor Baru:**
+
+```
+Final Score = (Base Score × 1000) + Time Bonus + Accuracy Bonus
+```
+
+### **🔢 Komponen Skor:**
+
+#### **1. Base Score** 
+- **Definisi**: Jumlah level yang berhasil dilalui
+- **Range**: 0 - tak terbatas
+- **Multiplier**: ×1000 (untuk memberikan bobot utama)
+- **Contoh**: Level 5 = 5000 poin base
+
+#### **2. Time Bonus** (0-500 poin)
+- **< 30 detik**: +500 poin (bonus maksimal)
+- **30-60 detik**: +400 hingga +100 poin (linear)
+- **1-2 menit**: +200 hingga 0 poin (linear)  
+- **> 2 menit**: 0 poin
+- **Tujuan**: Mengapresiasi kecepatan bermain
+
+#### **3. Accuracy Bonus** (0-200 poin)
+Berdasarkan **konsistensi response time**:
+- **Variance < 500ms**: +200 poin (sangat konsisten)
+- **Variance < 1000ms**: +150 poin (konsisten)
+- **Variance < 2000ms**: +100 poin (cukup konsisten)
+- **Variance < 5000ms**: +50 poin (kurang konsisten)
+- **Variance ≥ 5000ms**: 0 poin (tidak konsisten)
+
+### **🏆 Sistem Ranking Tie-Breaking:**
+
+Ketika 2+ pemain memiliki **Final Score sama**, ranking ditentukan berdasarkan:
+
+1. **Primary**: Final Score (tertinggi menang)
+2. **Secondary**: Total Duration (tercepat menang)
+3. **Tertiary**: Avg Response Time (tercepat menang)
+4. **Quaternary**: Time Bonus (tertinggi menang)
+5. **Final**: Accuracy Bonus (tertinggi menang)
+
+### **📱 Tampilan Leaderboard Baru:**
+
+| Rank | Nama | Final Score | Level | Bonus | Durasi | Avg Response | Waktu |
+|------|------|-------------|-------|-------|--------|--------------|-------|
+| 🥇 1 | Alice 🎯 | **3,687** | 3 | +687 | 45s | 892ms | 2 min ago |
+| 🥈 2 | Bob ⚪ | **3,000** | 3 | +0 | 1:23 | 1205ms | 5 min ago |
+
+**Legend:**
+- 🎯 = **Complex Score** (sistem baru)
+- ⚪ = **Simple Score** (sistem lama)
+
+### **💡 Keuntungan Sistem Baru:**
+
+1. **Lebih Adil**: Tidak hanya based level, tapi skill overall
+2. **Motivasi Tambahan**: Incentive untuk main cepat dan konsisten  
+3. **Competitive**: Tie-breaking yang sophistikasi
+4. **Backward Compatible**: Skor lama tetap valid
+5. **Detailed Analytics**: Tracking performance detail
+
+### **⚡ Contoh Perhitungan:**
+
+**Scenario**: Pemain mencapai **Level 5** dalam **45 detik** dengan **response variance 800ms**
+
+```
+Base Score: 5 × 1000 = 5,000 poin
+Time Bonus: 45s → +250 poin  
+Accuracy Bonus: 800ms variance → +150 poin
+Final Score: 5,000 + 250 + 150 = 5,400 poin
+```
+
+**vs**
+
+**Scenario**: Pemain mencapai **Level 5** dalam **90 detik** dengan **response variance 2500ms**
+
+```
+Base Score: 5 × 1000 = 5,000 poin
+Time Bonus: 90s → +0 poin
+Accuracy Bonus: 2500ms variance → +50 poin  
+Final Score: 5,000 + 0 + 50 = 5,050 poin
+```
+
+**Hasil**: Pemain pertama menang dengan margin 350 poin meskipun level sama!
+
+---
