@@ -14,7 +14,9 @@
     "clean": "node -e \"require('fs').writeFileSync('leaderboard.json', '[]'); console.log('🧹 Leaderboard cleared')\"",
     "backup": "node -e \"const fs=require('fs'); const data=fs.readFileSync('leaderboard.json'); fs.writeFileSync('leaderboard.backup.json', data); console.log('💾 Backup created')\"",
     "azure-deploy": "powershell -ExecutionPolicy Bypass -File ./deploy-to-azure.ps1",
-    "health-check": "curl http://localhost:3000/health || echo 'Server not running'"
+    "health-check": "curl http://localhost:3000/health || echo 'Server not running'",
+    "postinstall": "node -e \"const fs=require('fs'); if(!fs.existsSync('leaderboard.json')) fs.writeFileSync('leaderboard.json', '[]')\"",
+    "azure-start": "NODE_ENV=production node startup.js"
   },
   "keywords": [
     "iot",

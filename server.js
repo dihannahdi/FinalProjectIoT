@@ -4,12 +4,33 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const LEADERBOARD_FILE = './leaderboard.json';
+
+// Azure-specific storage configuration
+const LEADERBOARD_FILE = process.env.AZURE_STORAGE_PATH 
+    ? path.join(process.env.AZURE_STORAGE_PATH, 'leaderboard.json')
+    : './leaderboard.json';
+
+// Production environment detection
+const isProduction = process.env.NODE_ENV === 'production';
+const isAzure = process.env.WEBSITE_SITE_NAME !== undefined;
+
+console.log(`🌍 Environment: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+console.log(`☁️  Azure Environment: ${isAzure ? 'YES' : 'NO'}`);
+console.log(`📁 Leaderboard file: ${LEADERBOARD_FILE}`);
 
 // ===== SECURITY MIDDLEWARE =====
 // Add CORS support for IoT devices
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
+    // More restrictive CORS for production
+    const allowedOrigins = isProduction 
+        ? ['https://*.azurewebsites.net', process.env.ALLOWED_ORIGIN || '*']
+        : ['*'];
+    
+    const origin = req.headers.origin;
+    if (!isProduction || allowedOrigins.includes('*') || allowedOrigins.some(allowed => origin?.match(allowed.replace('*', '.*')))) {
+        res.header('Access-Control-Allow-Origin', origin || '*');
+    }
+    
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, device-id');
     res.header('X-Content-Type-Options', 'nosniff');
@@ -287,10 +308,13 @@ app.get('/', (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'OK', 
+    res.json({
+        status: 'healthy',
         timestamp: new Date().toISOString(),
-        uptime: process.uptime() 
+        environment: isProduction ? 'production' : 'development',
+        azure: isAzure,
+        uptime: process.uptime(),
+        memory: process.memoryUsage()
     });
 });
 

@@ -10,21 +10,56 @@ const path = require('path');
 
 console.log('🚀 Simon Says IoT - Starting Production Server...');
 
+// Azure environment detection
+const isAzure = process.env.WEBSITE_SITE_NAME !== undefined;
+const isProduction = process.env.NODE_ENV === 'production';
+
+console.log(`☁️  Azure Environment: ${isAzure ? 'YES' : 'NO'}`);
+console.log(`🌍 Environment: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+
+// Configure leaderboard file path for Azure
+const leaderboardFile = process.env.AZURE_STORAGE_PATH 
+    ? path.join(process.env.AZURE_STORAGE_PATH, 'leaderboard.json')
+    : './leaderboard.json';
+
+console.log(`📁 Leaderboard file path: ${leaderboardFile}`);
+
 // Ensure leaderboard.json exists
-const leaderboardFile = './leaderboard.json';
 if (!fs.existsSync(leaderboardFile)) {
     console.log('📄 Creating leaderboard.json file...');
-    fs.writeFileSync(leaderboardFile, '[]', 'utf8');
-    console.log('✅ leaderboard.json created successfully');
+    try {
+        // Ensure directory exists for Azure storage path
+        const dir = path.dirname(leaderboardFile);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+            console.log(`📁 Created directory: ${dir}`);
+        }
+        
+        fs.writeFileSync(leaderboardFile, '[]', 'utf8');
+        console.log('✅ leaderboard.json created successfully');
+    } catch (error) {
+        console.error('❌ Failed to create leaderboard.json:', error.message);
+        if (isAzure) {
+            console.log('🔄 Falling back to local storage in Azure temp directory');
+            const fallbackFile = './leaderboard.json';
+            fs.writeFileSync(fallbackFile, '[]', 'utf8');
+            console.log('✅ Fallback leaderboard.json created');
+        } else {
+            process.exit(1);
+        }
+    }
 }
 
 // Verify file permissions
 try {
-    fs.accessSync(leaderboardFile, fs.constants.R_OK | fs.constants.W_OK);
+    fs.accessSync(fs.existsSync(leaderboardFile) ? leaderboardFile : './leaderboard.json', 
+                  fs.constants.R_OK | fs.constants.W_OK);
     console.log('✅ File permissions verified');
 } catch (err) {
-    console.error('❌ File permission error:', err.message);
-    process.exit(1);
+    console.warn('⚠️  File permission warning:', err.message);
+    if (!isAzure) {
+        process.exit(1);
+    }
 }
 
 // Check required directories
