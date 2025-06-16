@@ -21,14 +21,14 @@ const char* password = "irengputeh";
 // Uncomment ONE of these configurations:
 
 // === LOCAL TESTING ===
-const char* websocket_host = "192.168.1.6";  // Your computer's IP address
-const uint16_t websocket_port = 3000;  // Same port as main server
-const char* websocket_path = "/hardware-ws";  // Hardware WebSocket path
+// const char* websocket_host = "192.168.1.6";  // Your computer's IP address
+// const uint16_t websocket_port = 3000;  // Same port as main server
+// const char* websocket_path = "/hardware-ws";  // Hardware WebSocket path
 
 // === AZURE DEPLOYMENT === 
-// const char* websocket_host = "simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
-// const uint16_t websocket_port = 80;  // Standard HTTP port
-// const char* websocket_path = "/hardware-ws";  // Hardware WebSocket path
+const char* websocket_host = "simon-says-exhqaycwc6c0hveg.canadacentral-01.azurewebsites.net";
+const uint16_t websocket_port = 443;  // HTTPS port for Azure App Service (secure connection)
+const char* websocket_path = "/hardware-ws";  // Hardware WebSocket path
 
 // Definisi Pin
 int led[] = {D5, D6, D7, D8};  // LED untuk Red, Green, Blue, Yellow
@@ -204,8 +204,14 @@ void setupWebSocket() {
     Serial.print("Path: ");
     Serial.println(websocket_path);
     
-    // server address, port and URL
-    webSocket.begin(websocket_host, websocket_port, websocket_path);
+    // server address, port and URL with SSL for Azure
+    if (websocket_port == 443) {
+        Serial.println("🔒 Using SSL/TLS connection for Azure");
+        webSocket.beginSSL(websocket_host, websocket_port, websocket_path);
+    } else {
+        Serial.println("📡 Using regular HTTP connection");
+        webSocket.begin(websocket_host, websocket_port, websocket_path);
+    }
     
     // event handler
     webSocket.onEvent(webSocketEvent);
@@ -491,7 +497,13 @@ void tryAlternativeConnection() {
     
     // Reconnect with same settings
     Serial.println("Attempting reconnection...");
-    webSocket.begin(websocket_host, websocket_port, websocket_path);
+    if (websocket_port == 443) {
+        Serial.println("🔒 Reconnecting with SSL/TLS...");
+        webSocket.beginSSL(websocket_host, websocket_port, websocket_path);
+    } else {
+        Serial.println("📡 Reconnecting with HTTP...");
+        webSocket.begin(websocket_host, websocket_port, websocket_path);
+    }
     webSocket.onEvent(webSocketEvent);
     webSocket.enableHeartbeat(15000, 3000, 2);
     webSocket.setReconnectInterval(5000);
@@ -501,6 +513,10 @@ void tryAlternativeConnection() {
     if (!isConnected) {
         Serial.println("❌ Reconnection failed");
         Serial.println("🔧 Check server status and network connectivity");
+        Serial.println("💡 Troubleshooting tips:");
+        Serial.println("   - Verify Azure app is running");
+        Serial.println("   - Check WebSocket endpoint is configured");
+        Serial.println("   - Ensure no firewall blocking port 443");
     } else {
         Serial.println("✅ Reconnection successful!");
     }
