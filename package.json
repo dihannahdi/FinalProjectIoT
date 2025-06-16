@@ -13,7 +13,8 @@
     "test:deployment": "node scripts/test-deployment.js",
     "test:local": "node scripts/test-deployment.js --local",
     "test:azure": "node scripts/test-deployment.js --azure",
-    "production": "NODE_ENV=production node index.js"
+    "production": "NODE_ENV=production node index.js",
+    "deploy": "node scripts/quick-deploy.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
