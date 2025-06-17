@@ -551,8 +551,16 @@ void startGameLogic() {
     Serial.print("⏱️ Game start time: ");
     Serial.println(gameStartTime);
     
-    // Seed random generator
-    randomSeed(analogRead(A0));
+    // Enhanced random seed for better randomization each attempt
+    unsigned long seed = millis() + analogRead(A0) + WiFi.RSSI() + ESP.getCycleCount();
+    randomSeed(seed);
+    Serial.print("🎲 Random seed: ");
+    Serial.println(seed);
+    
+    // Clear any previous sequence data
+    for (int i = 0; i < 100; i++) {
+        sequence[i] = -1; // Initialize with invalid values
+    }
     
     // Mulai permainan
     nextTurn();
@@ -608,9 +616,26 @@ void nextTurn() {
     Serial.print("Turn ke-");
     Serial.println(turn);
     
-    // Tambah warna baru ke urutan
-    sequence[seqL] = random(0, 4);
+    // Additional randomization for each turn using multiple entropy sources
+    unsigned long microSeed = micros() + analogRead(A0) + ESP.getCycleCount();
+    randomSeed(microSeed);
+    
+    // Tambah warna baru ke urutan dengan enhanced randomization
+    int newColor = random(0, 4);
+    
+    // Prevent immediate repetition for better gameplay (optional)
+    if (seqL > 0 && newColor == sequence[seqL-1] && random(0, 3) == 0) {
+        newColor = (newColor + 1 + random(0, 3)) % 4;
+    }
+    
+    sequence[seqL] = newColor;
     seqL++;
+    
+    Serial.print("🎲 New color generated: ");
+    Serial.print(colors[newColor]);
+    Serial.print(" (seed: ");
+    Serial.print(microSeed);
+    Serial.println(")");
     
     // Tampilkan urutan kepada pemain
     showSequence();
