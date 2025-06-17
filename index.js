@@ -105,12 +105,73 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Debug route to check file existence
+app.get('/debug/files', async (req, res) => {
+    try {
+        const publicPath = path.join(__dirname, 'public');
+        const files = await fs.readdir(publicPath);
+        
+        const fileDetails = [];
+        for (const file of files) {
+            try {
+                const filePath = path.join(publicPath, file);
+                const stats = await fs.stat(filePath);
+                fileDetails.push({
+                    name: file,
+                    size: stats.size,
+                    exists: true,
+                    fullPath: filePath
+                });
+            } catch (err) {
+                fileDetails.push({
+                    name: file,
+                    exists: false,
+                    error: err.message
+                });
+            }
+        }
+        
+        res.json({
+            success: true,
+            publicPath: publicPath,
+            files: fileDetails,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
 app.get('/faq', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'faq.html'));
+    const faqPath = path.join(__dirname, 'public', 'faq.html');
+    res.sendFile(faqPath, (err) => {
+        if (err) {
+            logger.trackError(err, { context: 'faq_serve', path: faqPath });
+            res.status(404).json({
+                success: false,
+                error: { message: 'FAQ page not found', stack: err.stack },
+                timestamp: new Date().toISOString()
+            });
+        }
+    });
 });
 
 app.get('/faq.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'faq.html'));
+    const faqPath = path.join(__dirname, 'public', 'faq.html');
+    res.sendFile(faqPath, (err) => {
+        if (err) {
+            logger.trackError(err, { context: 'faq_serve', path: faqPath });
+            res.status(404).json({
+                success: false,
+                error: { message: 'FAQ page not found', stack: err.stack },
+                timestamp: new Date().toISOString()
+            });
+        }
+    });
 });
 
 // API Endpoint: GET /api/leaderboard
