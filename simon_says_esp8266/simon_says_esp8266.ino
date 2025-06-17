@@ -15,7 +15,7 @@
 
 // Kredensial Wi-Fi
 const char* ssid = "arvel";
-const char* password = "17062004";
+const char* password = "arvikooo";
 
 // Konfigurasi Server - Easy switch between local and Azure
 // Uncomment ONE of these configurations:
