@@ -18,6 +18,9 @@ const statusMessage = document.getElementById('status');
 const leaderboard = document.getElementById('leaderboard');
 const connectionStatus = document.getElementById('connectionStatus');
 
+// Audio Manager
+let audioManager = null;
+
 // State variables
 let isConnected = false;
 let gameInProgress = false;
@@ -36,6 +39,14 @@ function init() {
         return;
     }
     
+    // Initialize Audio Manager
+    if (typeof AudioManager !== 'undefined') {
+        audioManager = new AudioManager();
+        console.log('🎵 Audio Manager initialized');
+    } else {
+        console.warn('⚠️ Audio Manager not available');
+    }
+    
     setupEventListeners();
     fetchInitialLeaderboard();
 }
@@ -46,11 +57,26 @@ function setupEventListeners() {
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('server:leaderboard-update', handleLeaderboardUpdate);
+    socket.on('server:trigger-game', handleGameTriggered);
+    socket.on('server:game-status', handleGameStatus);
     
     // DOM event listeners
     startButton.addEventListener('click', handleStartGame);
+    startButton.addEventListener('mouseenter', () => {
+        if (audioManager && !startButton.disabled) {
+            audioManager.onButtonHover();
+        }
+    });
+    
     playerNameInput.addEventListener('keypress', handleKeyPress);
     playerNameInput.addEventListener('input', handleNameInput);
+    
+    // Add click sound to buttons
+    document.addEventListener('click', (event) => {
+        if (audioManager && event.target.tagName === 'BUTTON' && !event.target.disabled) {
+            audioManager.onButtonClick();
+        }
+    });
 }
 
 // Socket.IO Event Handlers
@@ -61,6 +87,11 @@ function handleConnect() {
     isConnected = true;
     updateConnectionStatus(true);
     fetchInitialLeaderboard();
+    
+    // Play connection sound
+    if (audioManager) {
+        audioManager.onConnectionChange(true);
+    }
 }
 
 function handleDisconnect() {
@@ -68,6 +99,11 @@ function handleDisconnect() {
     isConnected = false;
     updateConnectionStatus(false);
     showStatusMessage('❌ Koneksi terputus! Mencoba menghubungkan kembali...', 'error');
+    
+    // Play disconnection sound
+    if (audioManager) {
+        audioManager.onConnectionChange(false);
+    }
 }
 
 function handleLeaderboardUpdate(data) {
@@ -81,10 +117,59 @@ function handleLeaderboardUpdate(data) {
         showStatusMessage('✅ Permainan selesai! Papan peringkat telah diperbarui.', 'success');
         playerNameInput.value = '';
         
+        // Play game completion sound and check for new record
+        if (audioManager) {
+            // Check if this is a new record (first position)
+            const isNewRecord = data.length > 0 && data[0].timestamp === Math.max(...data.map(entry => entry.timestamp));
+            if (isNewRecord) {
+                audioManager.onNewRecord();
+            } else {
+                audioManager.onLevelComplete();
+            }
+            
+            // Reset audio state to idle
+            setTimeout(() => {
+                audioManager.setGameState('idle');
+            }, 1000);
+        }
+        
         // Clear success message after 3 seconds
         setTimeout(() => {
             clearStatusMessage();
         }, 3000);
+    }
+}
+
+function handleGameTriggered(data) {
+    console.log('Game triggered on server:', data);
+    
+    if (audioManager) {
+        audioManager.onGameInProgress();
+        showStatusMessage('🎮 Game telah dimulai! Hardware menjalankan sequence...', 'active');
+    }
+}
+
+function handleGameStatus(data) {
+    console.log('Game status update:', data);
+    
+    if (audioManager && data.status) {
+        switch (data.status) {
+            case 'in_progress':
+                audioManager.onGameInProgress();
+                showStatusMessage(`🎯 Level ${data.currentTurn || 1} - Pemain: ${data.playerName}`, 'active');
+                break;
+            case 'waiting':
+                audioManager.onPlayerTurn();
+                showStatusMessage('⏳ Menunggu input pemain...', 'active');
+                break;
+            case 'completed':
+                audioManager.onLevelComplete();
+                break;
+            case 'error':
+                audioManager.onWrongInput();
+                showStatusMessage('❌ Terjadi error dalam permainan', 'error');
+                break;
+        }
     }
 }
 
@@ -124,6 +209,11 @@ function handleStartGame() {
     
     // Send start game event
     socket.emit('frontend:start-game', { name: playerName });
+    
+    // Play game start sound and set audio state
+    if (audioManager) {
+        audioManager.onGameStart();
+    }
     
     showStatusMessage('🎊 Memulai animasi startup... Skor akan dihitung berdasarkan level, kecepatan, dan akurasi!', 'active');
     
