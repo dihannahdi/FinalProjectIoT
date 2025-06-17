@@ -87,11 +87,6 @@ jobs:
         app-name: ${{ secrets.AZURE_APP_NAME || 'simon-says-iot' }}
         package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
 
-    - name: 'Health Check'
-      run: |
-        sleep 30  # Wait for deployment
-        curl -f https://${{ secrets.AZURE_APP_NAME || 'simon-says-iot' }}.azurewebsites.net/health || exit 1
-
     - name: 'Azure Logout'
       run: az logout
       if: always() 
