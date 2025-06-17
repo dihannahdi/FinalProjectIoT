@@ -1,5 +1,10 @@
+// Base configuration - auto-detect environment
+const BASE_URL = window.location.hostname === 'localhost' ? 
+    'http://localhost:3000' : 
+    window.location.origin;
+
 // Initialize Socket.IO connection with specific configuration
-const socket = io({
+const socket = io(BASE_URL, {
     transports: ['polling'],  // Use only polling to avoid WebSocket conflicts
     upgrade: false,  // Disable automatic upgrade
     rememberUpgrade: false,
@@ -238,7 +243,7 @@ function handleNameInput(event) {
 // Leaderboard Functions
 async function fetchInitialLeaderboard() {
     try {
-        const response = await fetch('/api/leaderboard');
+        const response = await fetch(`${BASE_URL}/api/leaderboard`);
         const result = await response.json();
         
         // Handle successful response

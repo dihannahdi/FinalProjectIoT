@@ -100,6 +100,19 @@ async function ensureDataDirectory() {
 app.get('/health', healthCheck);
 app.get('/api/metrics', metricsEndpoint);
 
+// Static page routes
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/faq', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'faq.html'));
+});
+
+app.get('/faq.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'faq.html'));
+});
+
 // API Endpoint: GET /api/leaderboard
 app.get('/api/leaderboard', async (req, res) => {
     const timer = logger.performance.start('leaderboard_fetch');
